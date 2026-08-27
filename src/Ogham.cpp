@@ -91,11 +91,14 @@ struct RateQuantity : ParamQuantity {
 
 struct ToneQuantity : ParamQuantity {
     std::string getDisplayValueString() override {
+        // The clean band comes from the same constants the panel dot does, so
+        // the tooltip and the display cannot disagree — they did, before the
+        // knob was mapped onto the pot scale SetLofiMacro expects.
         const float v = getValue();
-        const float d = v - 0.5f;
-        if (std::fabs(d) < 0.02f) return "Clean";
-        if (d < 0.f) return string::f("Filter / fold  %.0f%%", -d * 200.f);
-        return string::f("Crush / resonance  %.0f%%", d * 200.f);
+        if (v >= ogham::lofi::CleanKnobLow() && v <= ogham::lofi::CleanKnobHigh())
+            return "Clean";
+        if (v < 0.5f) return string::f("Filter / fold  %.0f%%", (0.5f - v) * 200.f);
+        return string::f("Crush / resonance  %.0f%%", (v - 0.5f) * 200.f);
     }
 };
 
@@ -132,6 +135,7 @@ struct Ogham : Module {
     // control ticks.
     std::atomic<int>      encDetents{0};
     std::atomic<bool>     encPressed{false};
+    std::atomic<bool>     menuToggle{false};
     std::atomic<uint32_t> displaySegments{0};
 
     int lastFunc1 = -1, lastFunc2 = -1;
@@ -203,6 +207,7 @@ struct Ogham : Module {
         in.voctVolts = inputs[CLK_VOCT_INPUT].getVoltage();
         in.encDelta  = encDetents.exchange(0, std::memory_order_relaxed);
         in.encPressed = encPressed.load(std::memory_order_relaxed);
+        in.menuToggle = menuToggle.exchange(false, std::memory_order_relaxed);
 
         // Edges are found at host rate and handed to the FIRST core step of this
         // sample: worst-case error is one core sample, 20.8 us. On hardware they
@@ -218,8 +223,9 @@ struct Ogham : Module {
         ogham::AppOutputs out;
         const int steps = conv.advance();
         for (int i = 0; i < steps; i++) {
-            in.syncEdge  = sync  && (i == 0);
-            in.clockEdge = clock && (i == 0);
+            in.syncEdge   = sync  && (i == 0);
+            in.clockEdge  = clock && (i == 0);
+            in.menuToggle = in.menuToggle && (i == 0);
             app.ProcessSample(in, out);
             const float channels[ogham::RateConverter::kChannels] = {
                 out.out1, out.out2, out.env };
@@ -378,6 +384,22 @@ std::string RateQuantity::getDisplayValueString() {
 }
 
 // ---------------------------------------------------------------------------
+// Right-click menu.
+//
+// The panel is hardware-true, and on the panel the way into the menu is to hold
+// the encoder for 600 ms. That is a fine gesture with a thumb and an awkward one
+// with a mouse, so the same thing is available here as a single click. The full
+// mirror of all 22 fields lands with the rest of the Rack-native shortcuts.
+// ---------------------------------------------------------------------------
+
+struct MenuToggleItem : MenuItem {
+    Ogham* module = nullptr;
+    void onAction(const event::Action& e) override {
+        if (module) module->menuToggle.store(true, std::memory_order_relaxed);
+    }
+};
+
+// ---------------------------------------------------------------------------
 // Widget — placeholder. Phase 4 replaces the panel and every component with the
 // module's own artwork; the VCV Component Library parts used here are CC BY-NC
 // and go with it.
@@ -452,6 +474,31 @@ struct OghamWidget : ModuleWidget {
             mm2px(Vec(31.2, 110.0)), module, Ogham::ENV_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(
             mm2px(Vec(42.8, 110.0)), module, Ogham::EOC_OUTPUT));
+    }
+
+    void appendContextMenu(Menu* menu) override {
+        Ogham* m = dynamic_cast<Ogham*>(module);
+        if (!m) return;
+
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createMenuLabel("Ogham"));
+
+        MenuToggleItem* toggle = new MenuToggleItem;
+        toggle->module = m;
+        toggle->text = m->app.InMenu() ? "Leave the Menu" : "Open the Menu";
+        toggle->rightText = "hold encoder";
+        menu->addChild(toggle);
+
+        // What the module can only show four digits of at a time.
+        if (m->app.InMenu()) {
+            menu->addChild(createMenuLabel(
+                string::f("Field %d of %d, value %d",
+                          m->app.MenuField() + 1, FX_NUM_FIELDS,
+                          m->app.MenuValue(m->app.MenuField()))));
+        } else {
+            menu->addChild(createMenuLabel(
+                string::f("Editing voice %d", m->app.SelectedVoice() + 1)));
+        }
     }
 };
 

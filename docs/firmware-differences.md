@@ -58,6 +58,7 @@ each becomes its ideal value; reproducing them would be reproducing the errors.
 | CV summing | MCP6004 inverting sum, `adc = 0.7501 - 0.9990·pot`, railing at 79 % of pot travel | Ideal sum of knob and CV, clamped 0–1. The isolated-CV split the Timbre route needs is therefore exact rather than recovered by subtracting a measured gain, and does not saturate at the rails | live | Yes |
 | `TIMBRE_CV_K_A/B` | 1.3164 / 1.3271, matching knob and CV gain | 1.0 | live | Yes |
 | V/oct input | ADC fractions, `VOCT_FRAC_PER_OCT` = 0.1948 | Exact 1 V/oct. `VOCT_RATE_TUNE` is kept — it tunes the bank, not the hardware | live | Yes |
+| Tone knob centre | `LOFI_CENTER` = 0.458, the fleet mean 12-o clock ADC reading, with a +-0.02 clean band | The knob is MAPPED onto that scale rather than the constant being dropped, because it lives inside `SetLofiMacro` — one of the files compiled verbatim, which this project does not edit. Piecewise linear: 0 to 0, centre to 0.458, 1 to 0.9597. Without it the clean dot lit about 4% anticlockwise of noon, which is what it did until someone used it | live | Yes, while the calibration stays inside the DSP |
 | ADC smoothing | Three one-pole filters against ADC noise | None. Rack params are exact; there is no noise to filter. The A/B sub-LSB hysteresis is kept anyway, so the two files stay readable against each other | live | Yes |
 | EOC level | 5 V, from the 74AHCT1G125 on the +5 V rail | 10 V, the Rack convention | live | Yes |
 

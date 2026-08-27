@@ -36,6 +36,47 @@
 
 namespace ogham {
 
+// ---------------------------------------------------------------------------
+// Tone knob: ideal position -> the pot reading the firmware expects.
+//
+// SetLofiMacro is one of the DSP files compiled verbatim, and it carries the
+// hardware's pot calibration inside it: LOFI_CENTER is 0.458, the fleet mean
+// ADC reading at 12 o'clock, with a +-0.02 clean band around it and a full-CW
+// value of 0.9597. Hand it an ideal 0..1 knob and the clean band lands about 4%
+// anticlockwise of noon — which is exactly what it does, and why the panel's
+// clean dot lit at 5-15% of fold instead of at centre.
+//
+// The other calibration constants could simply be dropped, because they live in
+// the transcribed layer. This one cannot: it is inside code this project does
+// not modify. So the knob is mapped to the scale that code expects instead —
+// piecewise linear, so 0 -> 0, centre -> LOFI_CENTER, 1 -> POT_MAX, and each
+// half of the throw keeps its full range.
+//
+// The result is that the clean band is very slightly asymmetric in knob terms
+// (about 2.2% of throw anticlockwise, 2.0% clockwise), because the pot's two
+// halves are. That is the hardware's own asymmetry, faithfully.
+// ---------------------------------------------------------------------------
+namespace lofi {
+constexpr float kCenter   = 0.458f;    // AudioPipeline's LOFI_CENTER
+constexpr float kDeadzone = 0.02f;     // AudioPipeline's LOFI_DEADZONE
+constexpr float kPotMax   = 0.9597f;   // AudioPipeline's POT_MAX
+constexpr float kPotMin   = 0.0f;
+
+inline float PotFromKnob(float knob) {
+    if (knob <= 0.5f) return kPotMin + (knob / 0.5f) * (kCenter - kPotMin);
+    return kCenter + ((knob - 0.5f) / 0.5f) * (kPotMax - kCenter);
+}
+
+// The knob positions where the clean band starts and ends — the tooltip and the
+// panel dot must agree, so both are derived from the same numbers.
+inline float CleanKnobLow() {
+    return 0.5f * (kCenter - kDeadzone) / (kCenter - kPotMin);
+}
+inline float CleanKnobHigh() {
+    return 0.5f + 0.5f * kDeadzone / (kPotMax - kCenter);
+}
+}  // namespace lofi
+
 // What the host hands the application each core sample. On hardware this is
 // what Controls reads from the ADC and the gate pins; here it comes from Rack's
 // params and ports. Neither the engine nor this class ever learns which.
@@ -65,6 +106,10 @@ struct AppInputs {
     // gesture curves are the module's own.
     int   encDelta   = 0;
     bool  encPressed = false;
+
+    // A request to enter or leave the menu without holding the encoder — the
+    // right-click equivalent of a long press. Consumed once, like the edges.
+    bool  menuToggle = false;
 };
 
 struct AppOutputs {

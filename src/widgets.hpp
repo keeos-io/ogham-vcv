@@ -131,6 +131,23 @@ struct SevenSegmentDisplay : Widget {
 // everything that decides what a detent MEANS — acceleration, long-press,
 // navigate versus edit — stays in the transcribed application layer, which is
 // what keeps the feel of the gesture the module's rather than Rack's.
+//
+// TURNING AND PRESSING ARE THE SAME MOUSE BUTTON, which the hardware never has
+// to deal with: on the module you turn the shaft with your fingers and press it
+// with your thumb, and the two cannot be confused. Reporting the mouse button
+// straight through made every turn begin with a press, so a slow turn crossed
+// the 600 ms long-press threshold and dropped into the menu, and a quick turn
+// released as a short click and switched voice.
+//
+// So the press is deferred and then decided by what the pointer does:
+//
+//   moves past kMoveThreshold   -> a turn. No press is ever reported.
+//   held still past kHoldMs     -> a press. The app then times its own long
+//                                  press from there, so hold-to-enter works.
+//   released before either      -> a click. A press and release are emitted
+//                                  back to back so the app sees a short click.
+//
+// The result is that a drag never enters the menu and a click never turns.
 // ---------------------------------------------------------------------------
 
 struct EncoderWidget : Widget {
@@ -143,21 +160,71 @@ struct EncoderWidget : Widget {
     // against a real module by turning both.
     static constexpr float kPixelsPerDetent = 8.f;
 
-    float accum = 0.f;
-    bool  dragging = false;
+    // How far the pointer must move before a press is reinterpreted as a turn,
+    // in pixels: enough to survive the shake of clicking, far less than a
+    // deliberate drag.
+    static constexpr float kMoveThreshold = 3.f;
+
+    // How long the button must be held still before it counts as a press. Well
+    // under the app's 600 ms long-press, so holding still still reaches the menu
+    // without a perceptible delay.
+    static constexpr double kHoldMs = 140.0;
+
+    float  accum = 0.f;
+    bool   dragging = false;
+    bool   buttonDown = false;
+    bool   holding = false;        // a press has been reported
+    bool   turned = false;         // the pointer moved: this gesture is a turn
+    float  travel = 0.f;           // total movement since the button went down
+    double downTime = 0.0;
 
     void push(int n) {
         if (detents && n != 0) detents->fetch_add(n, std::memory_order_relaxed);
     }
+    void setPressed(bool v) {
+        if (pressed) pressed->store(v, std::memory_order_relaxed);
+    }
 
     void onButton(const event::Button& e) override {
         if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-            if (pressed) pressed->store(true, std::memory_order_relaxed);
-            e.consume(this);
+            downTime = system::getTime();
+            buttonDown = true;
+            travel = 0.f;
+            turned = false;
+            holding = false;
+            e.consume(this);        // deferred: nothing is reported yet
         } else if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
-            if (pressed) pressed->store(false, std::memory_order_relaxed);
+            if (holding) {
+                setPressed(false);          // a real press ends
+            } else if (!turned) {
+                // Never moved, never held long enough: a click. Emit the press
+                // and let step() release it a frame later, so the app sees a
+                // press and a release rather than one impossible instant.
+                setPressed(true);
+                holding = true;
+                clickRelease = 2;           // frames
+            }
+            holding = holding && clickRelease > 0;
+            buttonDown = false;
         }
         Widget::onButton(e);
+    }
+
+    int clickRelease = 0;
+
+    void step() override {
+        // Finish a synthetic click.
+        if (clickRelease > 0 && --clickRelease == 0) {
+            setPressed(false);
+            holding = false;
+        }
+        // Promote a still, held button into a press.
+        if (buttonDown && !turned && !holding && clickRelease == 0 &&
+            (system::getTime() - downTime) * 1000.0 >= kHoldMs) {
+            holding = true;
+            setPressed(true);
+        }
+        Widget::step();
     }
 
     void onDragStart(const event::DragStart& e) override {
@@ -170,19 +237,22 @@ struct EncoderWidget : Widget {
     void onDragEnd(const event::DragEnd& e) override {
         dragging = false;
         APP->window->cursorUnlock();
-        // A drag is a turn, not a click: releasing after a drag must not read as
-        // a press-and-release the gesture machine would call a short click.
-        if (pressed) pressed->store(false, std::memory_order_relaxed);
         Widget::onDragEnd(e);
     }
 
     void onDragMove(const event::DragMove& e) override {
-        // Up is clockwise, matching every other knob in Rack.
-        accum += -e.mouseDelta.y / kPixelsPerDetent;
-        const int whole = (int)accum;
-        if (whole != 0) {
-            accum -= (float)whole;
-            push(whole);
+        travel += std::fabs(e.mouseDelta.y) + std::fabs(e.mouseDelta.x);
+        if (!turned && !holding && travel > kMoveThreshold) {
+            turned = true;          // this gesture is a turn, for good
+        }
+        if (turned) {
+            // Up is clockwise, matching every other knob in Rack.
+            accum += -e.mouseDelta.y / kPixelsPerDetent;
+            const int whole = (int)accum;
+            if (whole != 0) {
+                accum -= (float)whole;
+                push(whole);
+            }
         }
         Widget::onDragMove(e);
     }
@@ -219,10 +289,12 @@ struct EncoderWidget : Widget {
             nvgStrokeWidth(args.vg, 0.8f);
             nvgStroke(args.vg);
         }
-        // Cap
+        // Cap. It lights while the button is genuinely held, which is the only
+        // feedback that a hold is being counted towards entering the menu.
         nvgBeginPath(args.vg);
         nvgCircle(args.vg, r, r, r * 0.6f);
-        nvgFillColor(args.vg, dragging ? nvgRGB(0x2a, 0x33, 0x36)
+        nvgFillColor(args.vg, holding ? nvgRGB(0x3a, 0x44, 0x33)
+                            : dragging ? nvgRGB(0x2a, 0x33, 0x36)
                                        : nvgRGB(0x23, 0x2b, 0x2e));
         nvgFill(args.vg);
     }

@@ -418,9 +418,12 @@ void OghamApp::PollControls(const AppInputs& in) {
     if (timbreRoute == 1)      timbre += TIMBRE_CV_DEPTH * cvOnlyA;
     else if (timbreRoute == 2) timbre += TIMBRE_CV_DEPTH * cvOnlyB;
     timbre = Clamp01(timbre);
-    if (timbre != lastToneApplied_) {
-        lastToneApplied_ = timbre;
-        pipeline_.SetLofiMacro(timbre);   // computes coefficients: change only
+    // Mapped onto the pot scale SetLofiMacro is calibrated for — see the note in
+    // OghamApp.hpp. Without this the clean centre sits 4% anticlockwise of noon.
+    const float lofiPot = lofi::PotFromKnob(timbre);
+    if (lofiPot != lastToneApplied_) {
+        lastToneApplied_ = lofiPot;
+        pipeline_.SetLofiMacro(lofiPot);   // computes coefficients: change only
     }
 
     // --- Out2 decouple/drone. Idempotent: the engine only snapshots Out2 on the
@@ -486,6 +489,10 @@ void OghamApp::HandleEncoder(const AppInputs& in, uint32_t nowMs) {
     const bool pressed = in.encPressed;
     bool gShort = false, gLong = false;
 
+    // A menu request from the right-click menu enters the same path as a long
+    // press, so there is one implementation of what entering the menu means.
+    if (in.menuToggle) gLong = true;
+
     if (pressed && !encWasPressed_) {            // press start
         encPressStart_ = nowMs;
         encLongFired_ = false;
@@ -498,6 +505,7 @@ void OghamApp::HandleEncoder(const AppInputs& in, uint32_t nowMs) {
         encLongFired_ = true;
         gLong = true;                            // long press (while held)
     }
+    if (in.menuToggle) encLongFired_ = true;     // don't also fire on release
     if (!pressed && encWasPressed_ && !encLongFired_) {  // short release
         gShort = true;
     }
