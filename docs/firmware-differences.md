@@ -65,7 +65,8 @@ each becomes its ideal value; reproducing them would be reproducing the errors.
 
 | Area | Module | Plugin | Status | Permanent? |
 |---|---|---|---|---|
-| Hold capture phase | Re-rolled from the microsecond timer when the Rate knob moves; a power cycle returns to the built-in phase 7 | The same gesture, seeded from the engine's own position (`coreSample ^ t`) rather than a timer: unpredictable at the moment of a knob move, and reproducible when a patch is restored | live | Yes. A patch that reloads differently would be a bug in a plugin, however correct it is in a module |
+| Hold capture phase | Re-rolled from the microsecond timer when the Rate knob moves; a power cycle returns to the built-in phase 7 | The same gesture, seeded from the engine's own position (`coreSample ^ t`) rather than a timer. The phase itself is NOT persisted — `AudioPipeline` keeps it private with no accessor, and reaching it would mean editing the firmware. A reopened patch therefore starts on the built-in phase 7, which is exactly what the module does after a power cycle | live | Yes, and it matches the hardware rather than diverging from it |
+| Boot splash | The firmware version is shown for ~1 s at power-on | None. Instantiating a module in a patch is not a power-on, and the plugin's version is not the firmware's | live | Yes |
 
 ## Shared state
 

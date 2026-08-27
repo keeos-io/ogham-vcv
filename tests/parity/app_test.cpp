@@ -60,6 +60,35 @@ ogham::AppInputs defaults() {
     return in;
 }
 
+// --- encoder helpers -------------------------------------------------------
+//
+// The app derives all its gesture timing from its own sample counter, so a test
+// spends milliseconds by running samples. 48 core samples is 1 ms.
+
+void runMs(ogham::OghamApp& app, ogham::AppInputs in, int ms) {
+    ogham::AppOutputs out;
+    for (int n = 0; n < ms * 48; n++) {
+        app.ProcessSample(in, out);
+        in.encDelta = 0;          // detents are consumed once
+    }
+}
+
+// A turn of `detents`, delivered on one control tick, `gapMs` after the last
+// one — the gap is what selects the acceleration multiplier.
+void turn(ogham::OghamApp& app, ogham::AppInputs in, int detents, int gapMs = 200) {
+    runMs(app, in, gapMs);
+    in.encDelta = detents;
+    ogham::AppOutputs out;
+    for (int n = 0; n < 48; n++) { app.ProcessSample(in, out); in.encDelta = 0; }
+}
+
+void click(ogham::OghamApp& app, ogham::AppInputs in, int holdMs) {
+    in.encPressed = true;
+    runMs(app, in, holdMs);
+    in.encPressed = false;
+    runMs(app, in, 20);
+}
+
 }  // namespace
 
 int main() {
@@ -214,6 +243,141 @@ int main() {
         in.cvA = -0.25f;
         run(app, in, 96);
         checkNear(app.Engine().GetParamA(), 64, 1, "and subtracts below the knob");
+    }
+
+    // -----------------------------------------------------------------------
+    std::printf("Encoder gestures\n");
+    {
+        ogham::OghamApp app;
+        app.Init();
+        ogham::AppInputs in = defaults();
+
+        check(!app.InMenu(), "starts in function select");
+        check(app.SelectedVoice() == 0, "with voice 1 selected");
+
+        click(app, in, 50);                     // short
+        check(app.SelectedVoice() == 1, "a short click switches voice");
+        click(app, in, 50);
+        check(app.SelectedVoice() == 0, "and switches back");
+
+        click(app, in, 700);                    // long, past LONG_PRESS_MS
+        check(app.InMenu(), "a long press enters the menu");
+        check(!app.Editing(), "in navigate mode");
+
+        click(app, in, 50);
+        check(app.Editing(), "a short click enters edit");
+        click(app, in, 50);
+        check(!app.Editing(), "and commits back to navigate");
+
+        click(app, in, 700);
+        check(!app.InMenu(), "a long press leaves the menu");
+    }
+
+    // -----------------------------------------------------------------------
+    std::printf("Menu navigation\n");
+    {
+        ogham::OghamApp app;
+        app.Init();
+        ogham::AppInputs in = defaults();
+        click(app, in, 700);
+
+        turn(app, in, +1);
+        check(app.MenuField() == 1, "one detent moves one field");
+        turn(app, in, +4);
+        check(app.MenuField() == 5, "four more moves four");
+
+        // No wrap: a hard crank clamps at the end rather than jumping to the far
+        // side of the list.
+        for (int i = 0; i < 10; i++) turn(app, in, +5);
+        check(app.MenuField() == FX_NUM_FIELDS - 1, "cranking clamps at the last field");
+        for (int i = 0; i < 20; i++) turn(app, in, -5);
+        check(app.MenuField() == 0, "and at the first — no wrap either way");
+
+        // Re-entry lands on the field you left, not field 0.
+        turn(app, in, +7);
+        const int left = app.MenuField();
+        click(app, in, 700);                    // leave
+        click(app, in, 700);                    // and come back
+        check(app.MenuField() == left, "re-entry returns to the field you left");
+        check(!app.Editing(), "and never resumes mid-edit");
+    }
+
+    // -----------------------------------------------------------------------
+    std::printf("Menu editing\n");
+    {
+        ogham::OghamApp app;
+        app.Init();
+        ogham::AppInputs in = defaults();
+        click(app, in, 700);                    // into the menu, field 0
+
+        // Field 0 is the global on/off: CW is on, CCW is off, whatever the
+        // detent count.
+        click(app, in, 50);                     // edit
+        turn(app, in, -1);
+        check(app.MenuValue(0) == 0, "global off, turning anticlockwise");
+        turn(app, in, +1);
+        check(app.MenuValue(0) == 1, "and on, clockwise");
+        click(app, in, 50);                     // commit
+
+        // Field 2 is the chorus level, 0..99, accelerated like a param.
+        turn(app, in, +2);
+        check(app.MenuField() == 2, "navigated to the chorus level");
+        // The module boots with a gentle chorus already on, so the level starts
+        // at 45 rather than 0 — DefaultFxChain, not something this test sets.
+        const int chorusAtBoot = app.MenuValue(2);
+        check(chorusAtBoot == 45, "the chorus level boots at its default 45");
+        click(app, in, 50);
+        turn(app, in, +10);
+        check(app.MenuValue(2) == chorusAtBoot + 10,
+              "ten detents is ten counts at a slow turn");
+        for (int i = 0; i < 12; i++) turn(app, in, +10);
+        check(app.MenuValue(2) == 99, "and it clamps at 99");
+        click(app, in, 50);
+
+        // The type sub-field clamps to FX_TYPE_MAX rather than 99.
+        turn(app, in, +1);
+        check(app.MenuField() == 3, "navigated to the chorus type");
+        click(app, in, 50);
+        turn(app, in, +5);
+        check(app.MenuValue(3) == FX_TYPE_MAX, "a type field clamps to the variant");
+        click(app, in, 50);
+
+        // Hold is a power-of-two window shown as the tick count, one detent per
+        // step whatever the turn speed.
+        ogham::OghamApp app2;
+        app2.Init();
+        ogham::AppInputs in2 = defaults();
+        click(app2, in2, 700);
+        for (int i = 0; i < FX_FIELD_CVHOLD; i++) turn(app2, in2, +1);
+        check(app2.MenuField() == FX_FIELD_CVHOLD, "navigated to CV Out hold");
+        click(app2, in2, 50);
+        turn(app2, in2, +1);
+        check(app2.MenuValue(FX_FIELD_CVHOLD) == 2, "one step is a window of 2");
+        turn(app2, in2, +1);
+        check(app2.MenuValue(FX_FIELD_CVHOLD) == 4, "then 4 — powers of two");
+        for (int i = 0; i < 10; i++) turn(app2, in2, +1);
+        check(app2.MenuValue(FX_FIELD_CVHOLD) == 256, "clamping at 256");
+    }
+
+    // -----------------------------------------------------------------------
+    std::printf("Display\n");
+    {
+        ogham::OghamApp app;
+        app.Init();
+        ogham::AppInputs in = defaults();
+        runMs(app, in, 100);
+        const uint32_t voiceView = app.DisplaySegments();
+        check(voiceView != 0, "the display shows something in function select");
+
+        click(app, in, 700);
+        runMs(app, in, 100);
+        check(app.DisplaySegments() != voiceView, "and something else in the menu");
+
+        // Selecting the A440 reference changes what the voice view reads.
+        click(app, in, 700);
+        app.SetFormula1(GetReferenceIndex());
+        runMs(app, in, 100);
+        check(app.DisplaySegments() != voiceView, "and something else again for AA");
     }
 
     std::printf("\n%s\n", failures == 0 ? "PASS - the transcription behaves"

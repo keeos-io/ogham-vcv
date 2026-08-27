@@ -58,6 +58,13 @@ struct AppInputs {
     // True for exactly one core sample.
     bool  syncEdge  = false;
     bool  clockEdge = false;
+
+    // The Func encoder. `encDelta` is detents since the last control tick,
+    // signed; `encPressed` is the button's current state. Acceleration and
+    // long-press timing are NOT done by the host — they live in the app, so the
+    // gesture curves are the module's own.
+    int   encDelta   = 0;
+    bool  encPressed = false;
 };
 
 struct AppOutputs {
@@ -83,6 +90,24 @@ public:
     BytebeatEngine&  Engine()  { return engine_; }
     const TM1637&    Display() const { return tm1637_; }
 
+    // The four segment bytes the display would be showing, packed low digit
+    // first — the same layout the module's SWD telemetry uses.
+    uint32_t DisplaySegments() const;
+
+    // Menu state. RAM-only on the module (fxField is zero-initialised, so a
+    // power cycle starts at field 0); the plugin persists selOut and fxField
+    // because a patch has to reopen as it was left, but never mid-edit.
+    int  SelectedVoice() const { return selOut_; }
+    void SetSelectedVoice(int v) { selOut_ = (v != 0) ? 1 : 0; }
+    int  MenuField() const { return fxField_; }
+    void SetMenuField(int f);
+    bool InMenu() const { return funcMode_ == FUNC_FX; }
+    bool Editing() const { return fxEditing_; }
+
+    // The value the menu would show for a field — the display needs it, and so
+    // does a right-click mirror of the menu later.
+    int  MenuValue(int field) const;
+
     int  Formula1() const { return engine_.GetFormula1Index(); }
     int  Formula2() const { return engine_.GetFormula2Index(); }
     void SetFormula1(int i) { engine_.SetFormula1(i); }
@@ -99,6 +124,8 @@ public:
 private:
     void PollControls(const AppInputs& in);   // the main loop, ~1 kHz
     void OnClockEdge();                       // was the EXTI ISR
+    void HandleEncoder(const AppInputs& in, uint32_t nowMs);
+    void UpdateDisplay(uint32_t nowMs);
 
     // --- the firmware's objects, unmodified ---
     BytebeatEngine   engine_;
@@ -138,6 +165,26 @@ private:
     int32_t  lastKnobStepA_ = -1, lastKnobStepB_ = -1;
 
     int      prevFormulaIdx_ = -1;
+
+    // The Func encoder's state machine.
+    enum FuncMode { FUNC_SELECT = 0, FUNC_FX = 1 };
+    FuncMode funcMode_  = FUNC_SELECT;
+    int      selOut_    = 0;      // voice the encoder edits in SELECT mode
+    int      fxField_   = 0;
+    bool     fxEditing_ = false;  // false = navigate fields, true = edit value
+
+    bool     encWasPressed_ = false;
+    uint32_t encPressStart_ = 0;
+    bool     encLongFired_  = false;
+    uint32_t lastEncMs_     = 0;
+
+    uint32_t lastDisplayTime_ = 0;
+
+    // Detents delivered since the last control tick. The host can push them on
+    // any sample; they are drained once, when the gesture machine next runs.
+    // Accumulating here rather than host-side is what stops a detent being
+    // dropped on the 47 samples out of 48 where Poll does not fire.
+    int      encPending_ = 0;
 
     // Cheap change detection for the setters that are not cheap.
     float    lastToneApplied_ = -1.f;

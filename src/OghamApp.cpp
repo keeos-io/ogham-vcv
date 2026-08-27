@@ -74,6 +74,33 @@ constexpr float VOCT_RATE_MIN      = 1.0f / 64.0f;
 // integers become unreachable.
 constexpr float PARAM_COMMIT_LSB = 0.75f;
 
+// Encoder gestures.
+constexpr uint32_t LONG_PRESS_MS = 600;
+
+// Acceleration: the faster you turn, the bigger the step. A hard crank jumps
+// ~8 per detent (~12 detents across the whole 100-slot range) while single or
+// slow detents stay 1-for-1 for precise landing.
+constexpr uint32_t ENC_FAST_MS = 25;
+constexpr uint32_t ENC_MED_MS  = 50;
+constexpr uint32_t ENC_SLOW_MS = 90;
+constexpr int ENC_FAST_MULT = 8;
+constexpr int ENC_MED_MULT  = 4;
+constexpr int ENC_SLOW_MULT = 2;
+
+// Menu navigation accelerates on its own, gentler curve. The menu is 22 fields,
+// not 100 slots: at x8 a single fast detent would cross 40% of the list and
+// overshooting would be the norm. x3 still slams end-to-end in ~7 detents, and
+// clamping makes the ends a reliable landing spot.
+constexpr int ENC_MENU_FAST_MULT = 3;
+constexpr int ENC_MENU_MED_MULT  = 2;
+
+constexpr uint32_t DISPLAY_INTERVAL_MS = 33;   // ~30 Hz
+
+// How long after start-up the A/B value flash stays suppressed. On hardware
+// this protects the boot version splash; here it stops a freshly instantiated
+// module flashing a value nobody asked for.
+constexpr uint32_t PARAM_FLASH_GRACE_MS = 600;
+
 // ---------------------------------------------------------------------------
 // Helpers, as ogham_main.cpp declares them.
 // ---------------------------------------------------------------------------
@@ -109,6 +136,37 @@ inline uint32_t Median3(uint32_t a, uint32_t b, uint32_t c) {
 }
 
 inline float Clamp01(float v) { return v < 0.f ? 0.f : (v > 1.f ? 1.f : v); }
+
+// The menu's field index to the config byte it edits. Returns nullptr for the
+// global on/off (0) and the chain toggle (1), which are handled by name.
+uint8_t* FxFieldPtr(FxChainConfig& f, int field) {
+    switch (field) {
+        case 2:  return &f.chorusLevel;  case 3:  return &f.chorusType;
+        case 4:  return &f.chorusP1;     case 5:  return &f.chorusP2;
+        case 6:  return &f.flangerLevel; case 7:  return &f.flangerType;
+        case 8:  return &f.flangerP1;    case 9:  return &f.flangerP2;
+        case 10: return &f.phaserLevel;  case 11: return &f.phaserType;
+        case 12: return &f.phaserP1;     case 13: return &f.phaserP2;
+        default: return nullptr;
+    }
+}
+
+// True for the per-stage "type" sub-field (sub == 1): fields 3, 7, 11.
+inline bool FxFieldIsType(int field) {
+    return field >= 2 && field <= 13 && ((field - 2) % 4) == 1;
+}
+
+// Param-interp grid (q) steps through this discrete list (0 = off).
+uint8_t NextQuant(uint8_t cur, int dir) {
+    static const uint8_t list[] = {0, 4, 8, 16, 32, 64, 128};
+    const int n = (int)(sizeof(list) / sizeof(list[0]));
+    int idx = 0;
+    for (int i = 0; i < n; i++) if (list[i] == cur) { idx = i; break; }
+    idx += (dir > 0) ? 1 : -1;
+    if (idx < 0) idx = 0;
+    if (idx >= n) idx = n - 1;
+    return list[idx];
+}
 
 }  // namespace
 
@@ -185,6 +243,10 @@ void OghamApp::OnClockEdge() {
 // ---------------------------------------------------------------------------
 
 void OghamApp::PollControls(const AppInputs& in) {
+    const uint32_t nowMs = (uint32_t)(coreSample_ / 48ull);
+
+    HandleEncoder(in, nowMs);
+
     // --- CV->Timbre routing: partition each channel's pot+CV into a knob part
     //     and an isolated CV part. In the alt routing modes that CV is borrowed
     //     to modulate the Timbre/Lo-Fi macro, and the channel's Param then
@@ -210,6 +272,11 @@ void OghamApp::PollControls(const AppInputs& in) {
     // It costs nothing, and it keeps this readable against the firmware, where
     // it exists because comparing the ROUNDED value made every odd number
     // unreachable and the control moved in twos.
+    // Params still track the knobs in the menu, but the flash is suppressed so
+    // it cannot clobber the field you are editing. The boot grace does the same
+    // for the version splash; here it stops a freshly instantiated module
+    // flashing a value nobody asked for.
+    const bool flashOk = (nowMs > PARAM_FLASH_GRACE_MS) && (funcMode_ != FUNC_FX);
     {
         const float scaledA = paramASrc * 255.0f;
         int32_t a = (int32_t)(scaledA + 0.5f);
@@ -220,7 +287,7 @@ void OghamApp::PollControls(const AppInputs& in) {
         const bool    endA = (a != curA) && (a == 0 || a == 255);
         if (dA > PARAM_COMMIT_LSB || dA < -PARAM_COMMIT_LSB || endA) {
             engine_.SetParamA(a);
-            display_.UpdateFlashValue('A', a);
+            if (flashOk) display_.UpdateFlashValue('A', a);
         }
         // (Re)start the flash only on physical knob movement, so CV alone can
         // never hold the display on.
@@ -231,7 +298,7 @@ void OghamApp::PollControls(const AppInputs& in) {
             const float dRawA = rawScaledA - (float)lastKnobStepA_;
             if (dRawA > PARAM_COMMIT_LSB || dRawA < -PARAM_COMMIT_LSB) {
                 lastKnobStepA_ = (int32_t)(rawScaledA + 0.5f);
-                display_.FlashParam('A', a);
+                if (flashOk) display_.FlashParam('A', a);
             }
         }
 
@@ -244,7 +311,7 @@ void OghamApp::PollControls(const AppInputs& in) {
         const bool    endB = (b != curB) && (b == 0 || b == 255);
         if (dB > PARAM_COMMIT_LSB || dB < -PARAM_COMMIT_LSB || endB) {
             engine_.SetParamB(b);
-            display_.UpdateFlashValue('b', b);
+            if (flashOk) display_.UpdateFlashValue('b', b);
         }
         const float rawScaledB = knobB * 255.0f;
         if (lastKnobStepB_ < 0) {
@@ -253,7 +320,7 @@ void OghamApp::PollControls(const AppInputs& in) {
             const float dRawB = rawScaledB - (float)lastKnobStepB_;
             if (dRawB > PARAM_COMMIT_LSB || dRawB < -PARAM_COMMIT_LSB) {
                 lastKnobStepB_ = (int32_t)(rawScaledB + 0.5f);
-                display_.FlashParam('b', b);
+                if (flashOk) display_.FlashParam('b', b);
             }
         }
     }
@@ -376,7 +443,6 @@ void OghamApp::PollControls(const AppInputs& in) {
     // clock rather than on GetUs, because GetUs wraps every ~17.9 s and an edge
     // landing near the top of that cycle left extClockActive stuck true after
     // the cable was pulled. The same structure holds here.
-    const uint32_t nowMs = (uint32_t)(coreSample_ / 48ull);
     if (lastClockEdgeUs_ != lastSeenEdgeUs_) {
         lastSeenEdgeUs_ = lastClockEdgeUs_;
         lastEdgeSeenMs_ = nowMs;
@@ -409,7 +475,200 @@ void OghamApp::PollControls(const AppInputs& in) {
     }
     bpmClock_.Update(engine_.GetRate());
 
-    display_.Update();
+    UpdateDisplay(nowMs);
+}
+
+// ---------------------------------------------------------------------------
+// The Func encoder: gestures and the menu state machine.
+// ---------------------------------------------------------------------------
+
+void OghamApp::HandleEncoder(const AppInputs& in, uint32_t nowMs) {
+    const bool pressed = in.encPressed;
+    bool gShort = false, gLong = false;
+
+    if (pressed && !encWasPressed_) {            // press start
+        encPressStart_ = nowMs;
+        encLongFired_ = false;
+        // Touching the encoder hands the display over at once — an A/B value
+        // flash should not sit in front of the gesture that follows it.
+        display_.CancelFlash();
+    }
+    if (pressed && !encLongFired_ &&
+        (nowMs - encPressStart_ >= LONG_PRESS_MS)) {
+        encLongFired_ = true;
+        gLong = true;                            // long press (while held)
+    }
+    if (!pressed && encWasPressed_ && !encLongFired_) {  // short release
+        gShort = true;
+    }
+    encWasPressed_ = pressed;
+
+    // Long press: enter the menu from SELECT, or leave it from anywhere,
+    // including mid-edit. Short click: SELECT -> switch voice; menu -> toggle
+    // navigate <-> edit on the current field.
+    if (gLong) {
+        if (funcMode_ == FUNC_FX) {
+            funcMode_ = FUNC_SELECT;
+            fxEditing_ = false;
+        } else {
+            funcMode_ = FUNC_FX;
+            // Re-enter on the field you left, NOT field 0: with 22 fields and no
+            // wrap, re-navigating from the top every time to tweak one parameter
+            // is the whole cost of the menu.
+            fxEditing_ = false;   // but never resume mid-edit
+        }
+    } else if (gShort) {
+        if (funcMode_ == FUNC_SELECT) selOut_ ^= 1;
+        else fxEditing_ = !fxEditing_;
+    }
+
+    // Encoder turn (acceleration scales the step by how fast you turn).
+    const int enc = encPending_;
+    encPending_ = 0;
+    if (enc != 0) {
+        display_.CancelFlash();   // the turn owns the display from here
+        const uint32_t dt = nowMs - lastEncMs_;
+        lastEncMs_ = nowMs;
+        int step = 1;
+        if (dt < ENC_FAST_MS)      step = ENC_FAST_MULT;
+        else if (dt < ENC_MED_MS)  step = ENC_MED_MULT;
+        else if (dt < ENC_SLOW_MS) step = ENC_SLOW_MULT;
+        const int delta = enc * step;
+
+        if (funcMode_ == FUNC_FX) {
+            if (!fxEditing_) {
+                // Navigate: CLAMPED at both ends — no wrap, matching the function
+                // selector. Wrapping made a crank at either end silently jump to
+                // the far side of the menu; clamping means the ends are findable
+                // by feel.
+                int mstep = 1;
+                if (dt < ENC_FAST_MS)      mstep = ENC_MENU_FAST_MULT;
+                else if (dt < ENC_MED_MS)  mstep = ENC_MENU_MED_MULT;
+                int n = fxField_ + enc * mstep;
+                if (n < 0) n = 0;
+                if (n > FX_NUM_FIELDS - 1) n = FX_NUM_FIELDS - 1;
+                fxField_ = n;
+            } else if (fxField_ == FX_FIELD_GLOBAL) {
+                fx_.enabled = (enc > 0) ? 1 : 0;    // CW = on, CCW = off
+                pipeline_.SetFxChain(fx_);
+            } else if (fxField_ == FX_FIELD_CHAIN) {
+                fx_.parallel = (enc > 0) ? 1 : 0;   // CW = parallel, CCW = serial
+                pipeline_.SetFxChain(fx_);
+            } else if (fxField_ == FX_FIELD_QUANT) {
+                fx_.paramQuant = NextQuant(fx_.paramQuant, enc);
+                engine_.SetParamQuant(fx_.paramQuant);
+            } else if (fxField_ == FX_FIELD_DRONE) {
+                // Out2 decouple/drone: CW = decoupled (frozen), CCW = coupled.
+                // The engine snapshots on the couple->decouple edge.
+                fx_.out2Drone = (enc > 0) ? 1 : 0;
+            } else if (fxField_ == FX_FIELD_CVOUT) {
+                int nv = (int)fx_.cvOutMode + (enc > 0 ? 1 : -1);
+                if (nv < 0) nv = 0;
+                if (nv > 3) nv = 3;
+                fx_.cvOutMode = (uint8_t)nv;
+            } else if (fxField_ == FX_FIELD_TIMBRECV) {
+                int nv = (int)fx_.timbreCvRoute + (enc > 0 ? 1 : -1);
+                if (nv < 0) nv = 0;
+                if (nv > 2) nv = 2;
+                fx_.timbreCvRoute = (uint8_t)nv;
+            } else if (fxField_ == FX_FIELD_LPG) {
+                // Internal LPG, on/off and decay in one field: 0 = off, 1..99 =
+                // on with that decay. SetFxChain plucks it once on the
+                // 0->nonzero edge so the change is audible.
+                int nv = (int)fx_.lpgDecay + delta;
+                if (nv < 0) nv = 0;
+                if (nv > 99) nv = 99;
+                fx_.lpgDecay = (uint8_t)nv;
+                pipeline_.SetFxChain(fx_);   // live preview
+            } else if (fxField_ == FX_FIELD_CVSLEWRISE) {
+                int nv = (int)fx_.cvSlewRise + delta;
+                if (nv < 0) nv = 0;
+                if (nv > 99) nv = 99;
+                fx_.cvSlewRise = (uint8_t)nv;
+            } else if (fxField_ == FX_FIELD_CVSLEWFALL) {
+                int nv = (int)fx_.cvSlewFall + delta;
+                if (nv < 0) nv = 0;
+                if (nv > 99) nv = 99;
+                fx_.cvSlewFall = (uint8_t)nv;
+            } else if (fxField_ == FX_FIELD_CVHOLD) {
+                // 0 = off (every tick) .. 8 = every 256 ticks, power-of-2 steps.
+                // One detent per step, not accelerated: only nine values.
+                int nv = (int)fx_.cvHold + (enc > 0 ? 1 : -1);
+                if (nv < 0) nv = 0;
+                if (nv > 8) nv = 8;
+                fx_.cvHold = (uint8_t)nv;
+            } else {
+                // Type fields clamp to FX_TYPE_MAX; level and params use 0..99.
+                uint8_t* p = FxFieldPtr(fx_, fxField_);
+                const int maxv = FxFieldIsType(fxField_) ? FX_TYPE_MAX : 99;
+                int nv = (int)(*p) + delta;
+                if (nv < 0) nv = 0;
+                if (nv > maxv) nv = maxv;
+                *p = (uint8_t)nv;
+                pipeline_.SetFxChain(fx_);   // live preview
+            }
+        } else if (selOut_ == 0) {
+            engine_.SetFormula1(engine_.GetFormula1Index() + delta);
+        } else {
+            engine_.SetFormula2(engine_.GetFormula2Index() + delta);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+int OghamApp::MenuValue(int field) const {
+    if (field == FX_FIELD_GLOBAL)     return fx_.enabled;
+    if (field == FX_FIELD_CHAIN)      return fx_.parallel;
+    if (field == FX_FIELD_QUANT)      return fx_.paramQuant;
+    if (field == FX_FIELD_DRONE)      return fx_.out2Drone;
+    if (field == FX_FIELD_CVOUT)      return fx_.cvOutMode;
+    if (field == FX_FIELD_TIMBRECV)   return fx_.timbreCvRoute;
+    if (field == FX_FIELD_LPG)        return fx_.lpgDecay;
+    if (field == FX_FIELD_CVSLEWRISE) return fx_.cvSlewRise;
+    if (field == FX_FIELD_CVSLEWFALL) return fx_.cvSlewFall;
+    if (field == FX_FIELD_CVHOLD)     return (fx_.cvHold == 0) ? 0 : (1 << fx_.cvHold);
+    const uint8_t* p = FxFieldPtr(const_cast<FxChainConfig&>(fx_), field);
+    return p ? *p : 0;
+}
+
+void OghamApp::SetMenuField(int f) {
+    if (f < 0) f = 0;
+    if (f > FX_NUM_FIELDS - 1) f = FX_NUM_FIELDS - 1;
+    fxField_ = f;
+}
+
+uint32_t OghamApp::DisplaySegments() const {
+    const uint8_t* s = tm1637_.GetLastSegs();
+    return (uint32_t)s[0] | ((uint32_t)s[1] << 8)
+         | ((uint32_t)s[2] << 16) | ((uint32_t)s[3] << 24);
+}
+
+void OghamApp::UpdateDisplay(uint32_t nowMs) {
+    if (nowMs - lastDisplayTime_ < DISPLAY_INTERVAL_MS) return;
+    lastDisplayTime_ = nowMs;
+
+    display_.Update();   // time out any param flash first
+    const bool clean = pipeline_.IsLofiClean();
+
+    if (display_.IsFlashing()) {
+        // On hardware this is deferred to the display tick because the write
+        // blocks for ~9 ms and would otherwise throttle the main loop. Here the
+        // write costs nothing, but the timing is kept: it is what the module
+        // looks like.
+        display_.DrawPendingFlash(clean);
+    } else if (funcMode_ == FUNC_FX) {
+        // Edit mode: flash the value at ~80% duty (~600 ms period) so it is
+        // clear you are editing rather than navigating.
+        const bool blankValue = fxEditing_ && ((nowMs % 600) >= 480);
+        display_.ShowFxEdit(fxField_, MenuValue(fxField_),
+                            fx_.parallel != 0, clean, blankValue);
+    } else {
+        const int idx = (selOut_ == 0) ? engine_.GetFormula1Index()
+                                       : engine_.GetFormula2Index();
+        if (idx == GetReferenceIndex()) display_.ShowVoiceRef(selOut_ + 1, clean);
+        else                            display_.ShowVoice(selOut_ + 1, idx, clean);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -417,6 +676,8 @@ void OghamApp::PollControls(const AppInputs& in) {
 // ---------------------------------------------------------------------------
 
 void OghamApp::ProcessSample(const AppInputs& in, AppOutputs& out) {
+    encPending_ += in.encDelta;
+
     if (in.syncEdge) {
         engine_.SyncReset();
         pipeline_.LpgTrigger();

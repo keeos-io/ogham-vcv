@@ -6,12 +6,11 @@
 // https://github.com/keeos-io/ogham-vcv
 // -----------------------------------------------------------------------------
 //
-// PHASE 2: the voice and control layer. Every panel control and every jack the
-// module has, driving the transcribed application layer in src/OghamApp.cpp.
+// PHASE 3: the interface layer. Every panel control and every jack the module
+// has, plus the Func encoder, the four-digit display and the 22-field menu
+// behind them, driving the transcribed application layer in src/OghamApp.cpp.
 //
-// Still to come: the display, the encoder and the 22-field menu (phase 3), and
-// the real panel (phase 4). Func 1 and Func 2 are ordinary knobs here; the
-// encoder that replaces them arrives with the interface layer.
+// Still to come: the real panel and component art (phase 4).
 
 #include "plugin.hpp"
 #include "RateConverter.hpp"
@@ -26,9 +25,11 @@
 #endif
 
 #include "OghamApp.hpp"
+#include "widgets.hpp"
 #include "formulas.h"
 #include "ogham_clock.h"
 
+#include <atomic>
 #include <string>
 
 namespace {
@@ -125,6 +126,14 @@ struct Ogham : Module {
     dsp::SchmittTrigger  syncTrigger;
     dsp::SchmittTrigger  clockTrigger;
 
+    // The encoder lives on the UI thread and the app on the audio thread, so
+    // detents and the button cross between them as atomics. Detents accumulate
+    // and are drained by the app; nothing is lost if a frame lands between
+    // control ticks.
+    std::atomic<int>      encDetents{0};
+    std::atomic<bool>     encPressed{false};
+    std::atomic<uint32_t> displaySegments{0};
+
     int lastFunc1 = -1, lastFunc2 = -1;
 
     Ogham() {
@@ -173,9 +182,11 @@ struct Ogham : Module {
     void process(const ProcessArgs& args) override {
         if (args.sampleRate != conv.hostRate()) onSampleRateChange();
 
-        // Function selection is a param rather than app state, so that it can be
+        // Function selection is a param rather than app state, so it can be
         // automated and MIDI-mapped — the one deliberate departure from
-        // hardware-true. The encoder in phase 3 will drive these same params.
+        // hardware-true. The binding runs both ways: a param move (knob, cable,
+        // automation) pushes into the app, and the encoder's edits push back
+        // out, so neither source is second-class and they cannot fight.
         const int f1 = (int)std::round(params[FUNC1_PARAM].getValue());
         if (f1 != lastFunc1) { lastFunc1 = f1; app.SetFormula1(f1); }
         const int f2 = (int)std::round(params[FUNC2_PARAM].getValue());
@@ -190,6 +201,8 @@ struct Ogham : Module {
         in.cvB       = inputs[CV_B_INPUT].getVoltage() / 5.f;
         in.voctMode  = params[MODE_PARAM].getValue() > 0.5f;
         in.voctVolts = inputs[CLK_VOCT_INPUT].getVoltage();
+        in.encDelta  = encDetents.exchange(0, std::memory_order_relaxed);
+        in.encPressed = encPressed.load(std::memory_order_relaxed);
 
         // Edges are found at host rate and handed to the FIRST core step of this
         // sample: worst-case error is one core sample, 20.8 us. On hardware they
@@ -217,6 +230,132 @@ struct Ogham : Module {
         outputs[OUT2_OUTPUT].setVoltage(conv.read(1) * kAudioVolts);
         outputs[ENV_OUTPUT].setVoltage(conv.read(2) * kEnvVolts);
         outputs[EOC_OUTPUT].setVoltage(conv.gate() ? kGateVolts : 0.f);
+
+        // The encoder may have moved the selection; write it back to the params
+        // so the panel, the tooltips and the patch all agree.
+        const int a1 = app.Formula1();
+        if (a1 != lastFunc1) { lastFunc1 = a1; params[FUNC1_PARAM].setValue((float)a1); }
+        const int a2 = app.Formula2();
+        if (a2 != lastFunc2) { lastFunc2 = a2; params[FUNC2_PARAM].setValue((float)a2); }
+
+        displaySegments.store(app.DisplaySegments(), std::memory_order_relaxed);
+    }
+
+    // -----------------------------------------------------------------------
+    // Persistence.
+    //
+    // Named fields rather than a mirror of the firmware's packed struct: patch
+    // compatibility with the hardware is explicitly not a goal, and a diffable
+    // patch file is worth more than a wire format nobody reads.
+    //
+    // Knob positions are Rack params and are saved by the host, so they are not
+    // written here.
+    // -----------------------------------------------------------------------
+
+    json_t* dataToJson() override {
+        const FxChainConfig& fx = app.Fx();
+        json_t* root = json_object();
+        json_object_set_new(root, "schemaVersion", json_integer(1));
+        json_object_set_new(root, "selectedVoice", json_integer(app.SelectedVoice()));
+        json_object_set_new(root, "menuField", json_integer(app.MenuField()));
+
+        json_t* j = json_object();
+        json_object_set_new(j, "enabled", json_boolean(fx.enabled != 0));
+        json_object_set_new(j, "parallel", json_boolean(fx.parallel != 0));
+        for (int stage = 0; stage < 3; stage++) {
+            static const char* names[3] = {"chorus", "flanger", "phaser"};
+            const uint8_t* p = (stage == 0) ? &fx.chorusLevel
+                             : (stage == 1) ? &fx.flangerLevel : &fx.phaserLevel;
+            json_t* s = json_object();
+            json_object_set_new(s, "level", json_integer(p[0]));
+            json_object_set_new(s, "type",  json_integer(p[1]));
+            json_object_set_new(s, "p1",    json_integer(p[2]));
+            json_object_set_new(s, "p2",    json_integer(p[3]));
+            json_object_set_new(j, names[stage], s);
+        }
+        json_object_set_new(root, "fx", j);
+
+        json_t* cv = json_object();
+        json_object_set_new(cv, "mode",     json_integer(fx.cvOutMode));
+        json_object_set_new(cv, "slewRise", json_integer(fx.cvSlewRise));
+        json_object_set_new(cv, "slewFall", json_integer(fx.cvSlewFall));
+        json_object_set_new(cv, "hold",     json_integer(fx.cvHold));
+        json_object_set_new(root, "cvOut", cv);
+
+        json_object_set_new(root, "lpgDecay", json_integer(fx.lpgDecay));
+        json_object_set_new(root, "timbreRoute", json_integer(fx.timbreCvRoute));
+        json_object_set_new(root, "paramQuant", json_integer(fx.paramQuant));
+
+        // The drone is a frozen phase increment and a frozen A/B. Saving the
+        // toggle alone would bring it back at the wrong pitch.
+        json_t* dr = json_object();
+        json_object_set_new(dr, "on", json_boolean(fx.out2Drone != 0));
+        json_object_set_new(dr, "inc",
+            json_string(string::f("0x%016llx",
+                (unsigned long long)app.Engine().GetDroneInc()).c_str()));
+        json_object_set_new(dr, "a", json_integer(app.Engine().GetDroneParamA()));
+        json_object_set_new(dr, "b", json_integer(app.Engine().GetDroneParamB()));
+        json_object_set_new(root, "drone", dr);
+        return root;
+    }
+
+    void dataFromJson(json_t* root) override {
+        if (!root) return;
+        FxChainConfig& fx = app.Fx();
+
+        auto num = [&](json_t* obj, const char* key, int fallback) -> int {
+            if (!obj) return fallback;
+            json_t* v = json_object_get(obj, key);
+            return v ? (int)json_integer_value(v) : fallback;
+        };
+        auto flag = [&](json_t* obj, const char* key, bool fallback) -> bool {
+            if (!obj) return fallback;
+            json_t* v = json_object_get(obj, key);
+            return v ? json_is_true(v) : fallback;
+        };
+
+        app.SetSelectedVoice(num(root, "selectedVoice", 0));
+        app.SetMenuField(num(root, "menuField", 0));
+
+        json_t* j = json_object_get(root, "fx");
+        fx.enabled  = flag(j, "enabled", true) ? 1 : 0;
+        fx.parallel = flag(j, "parallel", false) ? 1 : 0;
+        for (int stage = 0; stage < 3; stage++) {
+            static const char* names[3] = {"chorus", "flanger", "phaser"};
+            uint8_t* p = (stage == 0) ? &fx.chorusLevel
+                       : (stage == 1) ? &fx.flangerLevel : &fx.phaserLevel;
+            json_t* sj = j ? json_object_get(j, names[stage]) : nullptr;
+            if (!sj) continue;
+            p[0] = (uint8_t)clamp(num(sj, "level", p[0]), 0, 99);
+            p[1] = (uint8_t)clamp(num(sj, "type",  p[1]), 0, FX_TYPE_MAX);
+            p[2] = (uint8_t)clamp(num(sj, "p1",    p[2]), 0, 99);
+            p[3] = (uint8_t)clamp(num(sj, "p2",    p[3]), 0, 99);
+        }
+
+        json_t* cv = json_object_get(root, "cvOut");
+        fx.cvOutMode  = (uint8_t)clamp(num(cv, "mode",     fx.cvOutMode), 0, 3);
+        fx.cvSlewRise = (uint8_t)clamp(num(cv, "slewRise", fx.cvSlewRise), 0, 99);
+        fx.cvSlewFall = (uint8_t)clamp(num(cv, "slewFall", fx.cvSlewFall), 0, 99);
+        fx.cvHold     = (uint8_t)clamp(num(cv, "hold",     fx.cvHold), 0, 8);
+
+        fx.lpgDecay      = (uint8_t)clamp(num(root, "lpgDecay", fx.lpgDecay), 0, 99);
+        fx.timbreCvRoute = (uint8_t)clamp(num(root, "timbreRoute", fx.timbreCvRoute), 0, 2);
+        fx.paramQuant    = (uint8_t)clamp(num(root, "paramQuant", fx.paramQuant), 0, 128);
+
+        json_t* dr = json_object_get(root, "drone");
+        fx.out2Drone = flag(dr, "on", false) ? 1 : 0;
+        app.ApplyFxChain();
+
+        if (fx.out2Drone && dr) {
+            json_t* incj = json_object_get(dr, "inc");
+            unsigned long long inc = 0;
+            if (incj && json_is_string(incj))
+                inc = std::strtoull(json_string_value(incj), nullptr, 0);
+            if (inc != 0) {
+                app.Engine().RestoreOut2Drone((uint64_t)inc,
+                                              num(dr, "a", 128), num(dr, "b", 128));
+            }
+        }
     }
 };
 
@@ -254,23 +393,47 @@ struct OghamWidget : ModuleWidget {
             Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
         // Positions match res/Ogham.svg, in millimetres.
-        addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(13.0, 24.0)), module, Ogham::FUNC1_PARAM));
-        addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(37.8, 24.0)), module, Ogham::FUNC2_PARAM));
+
+        // The display, in a framebuffer so it only repaints when the segments
+        // change — 30 Hz of content against Rack's 60 Hz of frames.
+        FramebufferWidget* fb = new FramebufferWidget;
+        ogham::SevenSegmentDisplay* seg = new ogham::SevenSegmentDisplay;
+        seg->box.pos  = mm2px(Vec(3.5, 5.5));
+        seg->box.size = mm2px(Vec(29.0, 11.5));
+        if (module) seg->segments = &module->displaySegments;
+        fb->addChild(seg);
+        addChild(fb);
+
+        ogham::EncoderWidget* enc = new ogham::EncoderWidget;
+        enc->box.size = mm2px(Vec(11.0, 11.0));
+        enc->box.pos  = mm2px(Vec(37.0, 5.8));
+        if (module) {
+            enc->detents = &module->encDetents;
+            enc->pressed = &module->encPressed;
+        }
+        addChild(enc);
+
+        // The two function slots stay as params so they can be automated and
+        // MIDI-mapped; the encoder drives whichever the selected voice points
+        // at. Small trimpots here because the panel is a placeholder — phase 4
+        // decides how they are presented for real.
+        addParam(createParamCentered<Trimpot>(
+            mm2px(Vec(13.0, 26.0)), module, Ogham::FUNC1_PARAM));
+        addParam(createParamCentered<Trimpot>(
+            mm2px(Vec(24.0, 26.0)), module, Ogham::FUNC2_PARAM));
 
         addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(13.0, 44.0)), module, Ogham::A_PARAM));
+            mm2px(Vec(13.0, 43.0)), module, Ogham::A_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(37.8, 44.0)), module, Ogham::B_PARAM));
+            mm2px(Vec(37.8, 43.0)), module, Ogham::B_PARAM));
 
         addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(13.0, 62.0)), module, Ogham::RATE_PARAM));
+            mm2px(Vec(13.0, 61.0)), module, Ogham::RATE_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(37.8, 62.0)), module, Ogham::TONE_PARAM));
+            mm2px(Vec(37.8, 61.0)), module, Ogham::TONE_PARAM));
 
         addParam(createParamCentered<CKSS>(
-            mm2px(Vec(25.4, 78.0)), module, Ogham::MODE_PARAM));
+            mm2px(Vec(25.4, 75.0)), module, Ogham::MODE_PARAM));
 
         addInput(createInputCentered<PJ301MPort>(
             mm2px(Vec(8.0, 92.0)), module, Ogham::CV_A_INPUT));
