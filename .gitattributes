@@ -1,0 +1,16 @@
+# Ogham for VCV Rack — attributes
+#
+# Order matters here: the LAST matching pattern wins, so the general rule comes
+# first and the exceptions after it.
+
+* text=auto
+*.png binary
+*.wav binary
+*.vcvplugin binary
+
+# ogham-src/ holds byte-identical copies of the Ogham firmware's own sources,
+# verified by sha256 against tools/upstream_manifest.json. Line-ending
+# translation on checkout would rewrite them and make every file look edited, so
+# git is told to leave them exactly as stored. Same for the vendored DaisySP.
+ogham-src/** -text
+dep/daisysp/** -text

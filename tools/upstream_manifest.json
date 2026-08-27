@@ -1,0 +1,24 @@
+{
+  "commit": "4dbd4c5ecdbdbd315f9859bb1f674b20f6fbdfbd",
+  "files": {
+    "bpm_clock.cpp": "dd15c4f035a3f3056e047e5188965febad740b60c332b24c675a835346e9e527",
+    "bpm_clock.h": "763e10c86710f7d640044761093e7d4901ccfd59c43bff48d073a70bee2271cf",
+    "bytebeat_engine.cpp": "0ef5f7b478dce13bfda2f3ca75ff632339d5f6d0dfe9da426b6d849b4325aebf",
+    "bytebeat_engine.h": "b47d96b66b23fd480562b06e21dbdd99572de7066c757d0c04e2770291c7a3a3",
+    "formulas.cpp": "beffb32b699133dd85dba9a5600fafca40d862d5436bb011c9d064070208bbcf",
+    "formulas.h": "4d2e477baaa3670ff6e9fc43dc9590a5e8a22336098caac949f184ce6c54cf89",
+    "ogham_audio_pipeline.cpp": "887291216a3a4fdb686919129d828c99aefe43af98d1a55c339f3dee9e514939",
+    "ogham_audio_pipeline.h": "9da41fac68da1c276428a77a51d4944ffcee977f393a1c032c47bd56d2e346e3",
+    "ogham_controls.cpp": "a6569eaff23727b1eb6cd4c7cb4e0117188c175f3e72e3dbb27c68c7e65a8186",
+    "ogham_controls.h": "572602d979b8bd429f2e33aa3860bac8905d306b32d073eb66474abe89e137c6",
+    "ogham_cv_output.cpp": "f7929be598f2555c2f32a7a63b7a24ce83d3939be60433e872893fa29cfe2cc9",
+    "ogham_cv_output.h": "9a364d12bfd66b1ec9091f2db4cfca571cae5e73dbe1b74dd6eaa35b71652480",
+    "ogham_display.cpp": "7e2cff9a611c7fa372618770cb339051a522c4abbc7c717e39f02f5ba705afee",
+    "ogham_display.h": "60cbb8ced82604ee63d18b8d3ba7ca5d1e8808c901874344c49f0468cdaafb7a",
+    "ogham_main.cpp": "f4648982f084a1c76439170bf767b0b1964b74d5a51137558c97bb4b8ed0e84e",
+    "ogham_pins.h": "bbaf46ab72244d4f94bdbd536ea99d1e583ca62713eb0e5d73cfe4e85adf3a37",
+    "tm1637.cpp": "d5d9cc90e3d0716ea6046cbc843310253e7ffaaab6bbc11978a458ce0f4b1670",
+    "tm1637.h": "70b892796eedd56c29f43c86b7ae511e201a003b93d0dce6c2db1d33302d2c65"
+  },
+  "url": "https://github.com/keeos-io/ogham.git"
+}

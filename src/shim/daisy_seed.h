@@ -27,6 +27,11 @@
 
 #pragma once
 
+// Sentinel: the plugin asserts this is defined, so that a real libDaisy header
+// arriving on the include path ahead of src/shim fails the build loudly instead
+// of quietly compiling the DSP against hardware definitions.
+#define OGHAM_SHIM_DAISY_SEED 1
+
 #include <cstdint>
 
 #include "ogham_clock.h"
@@ -35,8 +40,16 @@ namespace daisy {
 
 // A pin identifier. The value is never used for anything; it exists so
 // DaisySeed::GetPin has something to return and GPIO::Init something to take.
+//
+// Written with constructors rather than a default member initialiser: Rack
+// builds plugins with -std=c++11, where a class carrying an NSDMI is not an
+// aggregate and `Pin{index}` therefore will not compile. Everything in this
+// header has to stay C++11-clean for that reason, even though the offline
+// harness builds at C++17.
 struct Pin {
-    int index = -1;
+    int index;
+    Pin() : index(-1) {}
+    explicit Pin(int i) : index(i) {}
 };
 
 // A GPIO that isn't. Write() stores, Read() returns what was stored — enough
@@ -61,7 +74,7 @@ public:
     bool Read() const { return state_; }
 
 private:
-    Pin  pin_{};
+    Pin  pin_;
     Mode mode_ = Mode::INPUT;
     bool state_ = true;   // open-drain idle is high
 };
@@ -69,7 +82,7 @@ private:
 // Opaque. TM1637 holds a pointer to one and only ever calls GetPin().
 class DaisySeed {
 public:
-    Pin GetPin(int index) const { return Pin{index}; }
+    Pin GetPin(int index) const { return Pin(index); }
 };
 
 // The internal DAC. CvOutput writes a 12-bit value here once per control tick;

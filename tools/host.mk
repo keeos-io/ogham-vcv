@@ -23,7 +23,7 @@
 
 CXX      ?= g++
 BUILD    ?= build_host
-FW       := ogham/firmware/src
+FW       := ogham-src
 DEP      := dep/daisysp
 
 INCLUDES := -Isrc/shim -I$(FW) -I$(DEP) -I$(DEP)/Utility
@@ -48,10 +48,20 @@ DEP_SRC := \
 SHIM_SRC := src/shim/ogham_clock.cpp
 
 RENDER := $(BUILD)/render-$(notdir $(CXX))$(EXE_SUFFIX)
+CONV   := $(BUILD)/converter_test$(EXE_SUFFIX)
 
-.PHONY: all check compile-only clean
+.PHONY: all check compile-only converter clean
 
 all: $(RENDER)
+
+# The boundary converter, tested on its own with a synthetic core. No Rack and
+# no firmware sources — it depends on neither.
+converter: $(CONV)
+	@./$(CONV)
+
+$(CONV): tests/parity/converter_test.cpp src/RateConverter.hpp
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/parity/converter_test.cpp
 
 $(RENDER): tests/parity/render.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 	@mkdir -p $(BUILD)
