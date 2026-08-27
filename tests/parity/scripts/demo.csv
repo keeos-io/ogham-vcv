@@ -1,0 +1,19 @@
+# Ogham — a listenable walk through the current build.
+# Melodic, then rhythmic, then the tone macro either side of clean, then a
+# percussive voice with the LPG plucked by Sync.
+sample,formula1,formula2,A,B,rate,tone,fxfield,fxvalue,sync,clk
+0,84,60,128,96,1.0,0.5,,,,
+0,,,,,,,,,1,
+144000,,,168,,,,,,,
+288000,66,,,140,,,,,,
+288000,,,,,,,,,1,
+432000,,,,,,0.28,,,,
+576000,,,,,,0.80,,,,
+720000,44,90,110,60,0.5,0.5,,,,
+720000,,,,,,,2,55
+720001,,,,,,,,,1,
+864000,,,,,,,18,40
+864001,,,,,,,,,1,
+912000,,,,,,,,,1,
+960000,,,,,,,,,1,
+1008000,,,,,,,,,1,

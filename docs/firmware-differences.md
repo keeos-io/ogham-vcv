@@ -28,17 +28,17 @@ for why, and `tools/upstream_check.py` for how that is kept honest.
 
 | Area | Module | Plugin | Status | Permanent? |
 |---|---|---|---|---|
-| Application layer | `ogham_main.cpp` — a `main()` on file-scope globals with ISRs | Transcribed as `OghamApp`, per-instance | planned | Yes. The consequence of leaving the firmware untouched; see the implementation plan, section 4 |
+| Application layer | `ogham_main.cpp` — a `main()` on file-scope globals with ISRs | Transcribed as `OghamApp`, per-instance. Phase 2 (voice and control) done; the menu and display follow in phase 3 | live | Yes. The consequence of leaving the firmware untouched; see the implementation plan, section 4 |
 | Display transport | `tm1637.cpp` bit-bangs GPIO at ~9 ms per write | The same file, compiled verbatim against a no-op `daisy::GPIO`. `WriteSegments` caches the four segment bytes before clocking them out, so `GetLastSegs()` returns exactly what the hardware display would show | live | Yes — and better than the plan assumed, which was a hand-written stand-in and a second copy of the segment font |
 | Time source | `System::GetNow()` from the STM32 tick | A process-wide hook: engine time in Rack, a virtual clock in the offline renderer, the steady clock by default | live | Yes |
-| Control loop | Main loop, roughly 1 kHz, whatever the audio callback leaves it | Exactly every 48 core samples | planned | Yes. The firmware's rate drifts with load; a fixed divider is the closest honest equivalent |
+| Control loop | Main loop, roughly 1 kHz, and irregular — the blocking display writes stall it for ~9 ms at a time | Exactly every 48 core samples. ENV Out is therefore a clean 1 kHz staircase where the module's is a ragged one | live | Yes. The firmware's rate drifts with load; a fixed divider is the closest honest equivalent |
 | Sample rate | 48 kHz native | 48 kHz core, converted at the Rack boundary | live | Yes. No native-rate mode, since that would mean editing the DSP |
 | Latency | None | **~41.7 µs** — two core samples — when the host is not at 48 kHz. The Catmull-Rom window interpolates between the second and third of four points, so the read position trails the newest sample by two, not the one the plan estimated. Zero at 48 kHz, where the converter is bypassed entirely | live | Yes |
 | Resampling below 48 kHz | n/a | At host rates under 48 kHz the core is decimated without an anti-alias filter, folding 22–24 kHz content down. Deliberate: the source is an 8-bit stream at an 8 kHz tick rate whose aliasing is the sound, and filtering it on the way out would be adding something the module does not have | live | Yes |
 | Source delivery | n/a | Firmware sources vendored as verified copies, not a submodule: a recursive clone of a submodule descends into libDaisy and ST's CMSIS trees and fails | live | Yes |
 | Persistence | QSPI, packed `OghamSettings` struct | JSON, named fields, plugin-side `schemaVersion` | planned | Yes. Hardware patch compatibility is explicitly not a goal |
 | Instrumentation | DWT cycle counters, SWD telemetry struct | None | live | Yes |
-| Encoder | Quadrature scanned at 20 kHz on TIM5, with NVIC priority work behind it | Detent events from a Rack widget | planned | Yes |
+| Encoder | Quadrature scanned at 20 kHz on TIM5, with NVIC priority work behind it | Detent events from a Rack widget (phase 3). Until then the two function slots are ordinary params | planned | Yes |
 
 ## Levels and calibration
 
@@ -48,21 +48,24 @@ each becomes its ideal value; reproducing them would be reproducing the errors.
 | Area | Module | Plugin | Status | Permanent? |
 |---|---|---|---|---|
 | `AUDIO_OUT_LEVEL` | 0.51, halving the digital output to compensate an analog stage running ~2× hot | 1.0 | live | Converge if the hardware gain is ever halved |
-| Audio scaling | ~10 Vpp at the jack | ×5 V, so nominal level is ±5 V and FX peaks reach about ±6.4 V | live | Open — `ovcv-maw` |
+| Audio scaling | ~10 Vpp at the jack | ×5 V, so nominal level is ±5 V. Measured peaks: ±1.28 on the smoke script, ±1.53 on the demo, so ±6.4 to ±7.6 V | live | Open — `ovcv-maw` |
+| ENV Out | DAC 0–3.3 V through a TL072 to roughly 0–10 V | ×10 V from the same 0–1 the DAC is handed | live | Yes |
+| Clock timestamps | `System::GetUs()`, which wraps every ~17.9 s and needs a signed-difference guard | A 64-bit core-sample counter, which cannot wrap in a session. The guard is not transcribed — one of the few places where less code is the faithful translation | live | Yes |
+| Clk / VOct jack | One jack into both a comparator and an ADC tap; the clock ISR runs whatever the Mode switch says | Edges are only read in Clock mode; in V/oct the jack is a pitch CV and nothing else | live | Yes |
 | Output headroom | Analog stage clips | The FX chain peaks around ±1.28 on the smoke script, so a nominal ×5 V scaling reaches ~±6.4 V on peaks. Real modules do this too; the alternative is scaling everything down and being quieter than the hardware | open | To decide in phase 2 |
-| `RATE_POT_CENTER` | 0.459, the fleet mean 12-o'clock ADC reading | 0.5 — otherwise unity rate would not land at noon | planned | Yes |
-| `POT_FULL_SCALE` | 0.945, deliberately under the measured 0.9508 so every module reaches 255 | 1.0 | planned | Yes |
-| CV summing | MCP6004 inverting sum, `adc = 0.7501 - 0.9990·pot`, railing at 79 % of pot travel | Ideal sum of knob and CV, clamped 0–1 | planned | Yes |
-| `TIMBRE_CV_K_A/B` | 1.3164 / 1.3271, matching knob and CV gain | 1.0 | planned | Yes |
-| V/oct input | ADC fractions, `VOCT_FRAC_PER_OCT` = 0.1948 | Exact 1 V/oct. `VOCT_RATE_TUNE` is kept — it tunes the bank, not the hardware | planned | Yes |
-| ADC smoothing | Three one-pole filters against ADC noise | None. Rack params are exact; there is no noise to filter | planned | Yes |
-| EOC level | 5 V, from the 74AHCT1G125 on the +5 V rail | 10 V, the Rack convention | planned | Yes |
+| `RATE_POT_CENTER` | 0.459, the fleet mean 12-o'clock ADC reading | 0.5 — otherwise unity rate would not land at noon | live | Yes |
+| `POT_FULL_SCALE` | 0.945, deliberately under the measured 0.9508 so every module reaches 255 | 1.0 | live | Yes |
+| CV summing | MCP6004 inverting sum, `adc = 0.7501 - 0.9990·pot`, railing at 79 % of pot travel | Ideal sum of knob and CV, clamped 0–1. The isolated-CV split the Timbre route needs is therefore exact rather than recovered by subtracting a measured gain, and does not saturate at the rails | live | Yes |
+| `TIMBRE_CV_K_A/B` | 1.3164 / 1.3271, matching knob and CV gain | 1.0 | live | Yes |
+| V/oct input | ADC fractions, `VOCT_FRAC_PER_OCT` = 0.1948 | Exact 1 V/oct. `VOCT_RATE_TUNE` is kept — it tunes the bank, not the hardware | live | Yes |
+| ADC smoothing | Three one-pole filters against ADC noise | None. Rack params are exact; there is no noise to filter. The A/B sub-LSB hysteresis is kept anyway, so the two files stay readable against each other | live | Yes |
+| EOC level | 5 V, from the 74AHCT1G125 on the +5 V rail | 10 V, the Rack convention | live | Yes |
 
 ## Determinism
 
 | Area | Module | Plugin | Status | Permanent? |
 |---|---|---|---|---|
-| Hold capture phase | Re-rolled from the microsecond timer when the Rate knob moves; a power cycle returns to the built-in phase 7 | The same gesture, but the RNG state is persisted, so a reopened patch sounds the way it was left | planned | Yes. A patch that reloads differently would be a bug in a plugin, however correct it is in a module |
+| Hold capture phase | Re-rolled from the microsecond timer when the Rate knob moves; a power cycle returns to the built-in phase 7 | The same gesture, seeded from the engine's own position (`coreSample ^ t`) rather than a timer: unpredictable at the moment of a knob move, and reproducible when a patch is restored | live | Yes. A patch that reloads differently would be a bug in a plugin, however correct it is in a module |
 
 ## Shared state
 

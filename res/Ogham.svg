@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Ogham for VCV Rack - PLACEHOLDER panel.
-  10 HP = 50.8 x 128.5 mm. Phase 4 replaces this with the module's own artwork;
-  until then it exists to hold the components layer and give the module a face.
+
+  10 HP = 50.8 x 128.5 mm. Phase 4 replaces this with the module's own artwork.
+
+  NOTE: the <text> below does NOT render. Rack draws panels with nanosvg, which
+  has no text support at all, so labels must be converted to paths before export
+  (Inkscape: Path > Object to Path). Left as text here deliberately - this is a
+  placeholder, and the real panel conversion has to solve it properly.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
      width="50.8mm" height="128.5mm" viewBox="0 0 50.8 128.5" version="1.1">
@@ -17,16 +22,22 @@
 
     <text x="13.0" y="31.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">FUNC 1</text>
     <text x="37.8" y="31.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">FUNC 2</text>
-    <text x="13.0" y="53.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">A</text>
-    <text x="37.8" y="53.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">B</text>
-    <text x="13.0" y="73.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">RATE</text>
-    <text x="37.8" y="73.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">TONE</text>
+    <text x="13.0" y="51.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">A</text>
+    <text x="37.8" y="51.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">B</text>
+    <text x="13.0" y="69.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">RATE</text>
+    <text x="37.8" y="69.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">TONE</text>
+    <text x="25.4" y="84.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.4" text-anchor="middle">CLK / VOCT</text>
 
-    <text x="9.0" y="90.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">SYNC</text>
+    <text x="8.0"  y="86.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.4" text-anchor="middle">CV A</text>
+    <text x="19.6" y="86.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.4" text-anchor="middle">CV B</text>
+    <text x="31.2" y="86.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.4" text-anchor="middle">SYNC</text>
+    <text x="42.8" y="86.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.4" text-anchor="middle">CLK</text>
 
-    <rect x="2.5" y="103.5" width="29.0" height="14.5" rx="1.2" fill="#245e5a" opacity="0.35"/>
-    <text x="9.0" y="107.0" fill="#dfe6e3" font-family="sans-serif" font-size="2.6" text-anchor="middle">OUT 1</text>
-    <text x="24.0" y="107.0" fill="#dfe6e3" font-family="sans-serif" font-size="2.6" text-anchor="middle">OUT 2</text>
+    <rect x="2.0" y="101.5" width="46.8" height="14.5" rx="1.2" fill="#245e5a" opacity="0.35"/>
+    <text x="8.0"  y="104.5" fill="#dfe6e3" font-family="sans-serif" font-size="2.4" text-anchor="middle">OUT 1</text>
+    <text x="19.6" y="104.5" fill="#dfe6e3" font-family="sans-serif" font-size="2.4" text-anchor="middle">OUT 2</text>
+    <text x="31.2" y="104.5" fill="#dfe6e3" font-family="sans-serif" font-size="2.4" text-anchor="middle">ENV</text>
+    <text x="42.8" y="104.5" fill="#dfe6e3" font-family="sans-serif" font-size="2.4" text-anchor="middle">EOC</text>
 
     <text x="25.4" y="125" fill="#5c6a6b" font-family="sans-serif" font-size="2.6"
           text-anchor="middle" letter-spacing="0.5">keeos</text>
@@ -34,12 +45,18 @@
   <g inkscape:groupmode="layer" inkscape:label="components" id="components">
     <circle cx="13.0" cy="24.0" r="4"/>
     <circle cx="37.8" cy="24.0" r="4"/>
-    <circle cx="13.0" cy="46.0" r="4"/>
-    <circle cx="37.8" cy="46.0" r="4"/>
-    <circle cx="13.0" cy="66.0" r="4"/>
-    <circle cx="37.8" cy="66.0" r="4"/>
-    <circle cx="9.0"  cy="96.0" r="4"/>
-    <circle cx="9.0"  cy="112.0" r="4"/>
-    <circle cx="24.0" cy="112.0" r="4"/>
+    <circle cx="13.0" cy="44.0" r="4"/>
+    <circle cx="37.8" cy="44.0" r="4"/>
+    <circle cx="13.0" cy="62.0" r="4"/>
+    <circle cx="37.8" cy="62.0" r="4"/>
+    <circle cx="25.4" cy="78.0" r="3"/>
+    <circle cx="8.0"  cy="92.0" r="4"/>
+    <circle cx="19.6" cy="92.0" r="4"/>
+    <circle cx="31.2" cy="92.0" r="4"/>
+    <circle cx="42.8" cy="92.0" r="4"/>
+    <circle cx="8.0"  cy="110.0" r="4"/>
+    <circle cx="19.6" cy="110.0" r="4"/>
+    <circle cx="31.2" cy="110.0" r="4"/>
+    <circle cx="42.8" cy="110.0" r="4"/>
   </g>
 </svg>

@@ -49,8 +49,9 @@ SHIM_SRC := src/shim/ogham_clock.cpp
 
 RENDER := $(BUILD)/render-$(notdir $(CXX))$(EXE_SUFFIX)
 CONV   := $(BUILD)/converter_test$(EXE_SUFFIX)
+APPT   := $(BUILD)/app_test$(EXE_SUFFIX)
 
-.PHONY: all check compile-only converter clean
+.PHONY: all check compile-only converter app clean
 
 all: $(RENDER)
 
@@ -62,6 +63,15 @@ converter: $(CONV)
 $(CONV): tests/parity/converter_test.cpp src/RateConverter.hpp
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -Isrc -o $@ tests/parity/converter_test.cpp
+
+# The transcribed application layer: clock tracking, V/oct, the rate map. The
+# only automated check that ogham_main.cpp's behaviour survived the move.
+app: $(APPT)
+	@./$(APPT)
+
+$(APPT): tests/parity/app_test.cpp src/OghamApp.cpp src/OghamApp.hpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -Isrc -o $@ 		tests/parity/app_test.cpp src/OghamApp.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 
 $(RENDER): tests/parity/render.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 	@mkdir -p $(BUILD)
