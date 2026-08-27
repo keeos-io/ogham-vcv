@@ -110,7 +110,6 @@ struct Ogham : Module {
         A_PARAM, B_PARAM,
         RATE_PARAM, TONE_PARAM,
         MODE_PARAM,
-        ENCMODE_PARAM,
         PARAMS_LEN
     };
     enum InputId {
@@ -134,13 +133,18 @@ struct Ogham : Module {
     // detents and the button cross between them as atomics. Detents accumulate
     // and are drained by the app; nothing is lost if a frame lands between
     // control ticks.
+    // The encoder lives on the UI thread and the app on the audio thread. It
+    // sends detents and already-classified gestures — a mouse cannot supply a
+    // clean button, since the button that presses the encoder is the one that
+    // turns it. Counts rather than flags, so nothing is lost on a sample where
+    // the app's 1 kHz poll does not run.
     std::atomic<int>      encDetents{0};
-    std::atomic<bool>     encPressed{false};
+    std::atomic<int>      encClicks{0};
+    std::atomic<int>      encLongs{0};
     std::atomic<bool>     menuToggle{false};
     std::atomic<uint32_t> displaySegments{0};
 
     int lastFunc1 = -1, lastFunc2 = -1;
-    bool lastEncMode = false;
 
     Ogham() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -148,7 +152,11 @@ struct Ogham : Module {
         const int lastSlot = GetFormulaCount() - 1;   // 100: the A440 reference
         configParam<FunctionQuantity>(FUNC1_PARAM, 0.f, (float)lastSlot, 0.f,
                                       "Voice 1 function");
-        configParam<FunctionQuantity>(FUNC2_PARAM, 0.f, (float)lastSlot, 0.f,
+        // Voice 2 defaults to function 1, not 0. BytebeatEngine::Init picks a
+        // distinct default deliberately, "so Out2 differs from Out1" — and a
+        // param defaulting to 0 would quietly overwrite that on construction,
+        // leaving both voices on the same function.
+        configParam<FunctionQuantity>(FUNC2_PARAM, 0.f, (float)lastSlot, 1.f,
                                       "Voice 2 function");
         paramQuantities[FUNC1_PARAM]->snapEnabled = true;
         paramQuantities[FUNC2_PARAM]->snapEnabled = true;
@@ -158,12 +166,6 @@ struct Ogham : Module {
         configParam<RateQuantity>(RATE_PARAM, 0.f, 1.f, 0.5f, "Rate");
         configParam<ToneQuantity>(TONE_PARAM, 0.f, 1.f, 0.5f, "Tone");
         configSwitch(MODE_PARAM, 0.f, 1.f, 0.f, "Mode", {"Clock", "V/oct"});
-
-        // What the encoder does. The module has no such switch — a 600 ms hold
-        // is the only way across — but a hold is a poor gesture with a mouse and
-        // an invisible piece of state either way. See OghamApp::SetMenuMode.
-        configSwitch(ENCMODE_PARAM, 0.f, 1.f, 0.f, "Encoder",
-                     {"Function select", "Menu"});
 
         configInput(CV_A_INPUT, "Parameter A CV");
         configInput(CV_B_INPUT, "Parameter B CV");
@@ -204,16 +206,6 @@ struct Ogham : Module {
         const int f2 = (int)std::round(params[FUNC2_PARAM].getValue());
         if (f2 != lastFunc2) { lastFunc2 = f2; app.SetFormula2(f2); }
 
-        // The encoder's mode is a switch here rather than a hidden hold. It
-        // binds both ways, like the function slots: moving the switch changes
-        // the mode, and a hold on the encoder (or the right-click item) moves
-        // the switch, so there is only ever one answer to which mode you are in.
-        const bool switchWantsMenu = params[ENCMODE_PARAM].getValue() > 0.5f;
-        if (switchWantsMenu != lastEncMode) {
-            lastEncMode = switchWantsMenu;
-            app.SetMenuMode(switchWantsMenu);
-        }
-
         ogham::AppInputs in;
         in.potA      = params[A_PARAM].getValue();
         in.potB      = params[B_PARAM].getValue();
@@ -223,9 +215,10 @@ struct Ogham : Module {
         in.cvB       = inputs[CV_B_INPUT].getVoltage() / 5.f;
         in.voctMode  = params[MODE_PARAM].getValue() > 0.5f;
         in.voctVolts = inputs[CLK_VOCT_INPUT].getVoltage();
-        in.encDelta  = encDetents.exchange(0, std::memory_order_relaxed);
-        in.encPressed = encPressed.load(std::memory_order_relaxed);
-        in.menuToggle = menuToggle.exchange(false, std::memory_order_relaxed);
+        in.encDelta       = encDetents.exchange(0, std::memory_order_relaxed);
+        in.encClicks      = encClicks.exchange(0, std::memory_order_relaxed);
+        in.encLongPresses = encLongs.exchange(0, std::memory_order_relaxed);
+        in.menuToggle     = menuToggle.exchange(false, std::memory_order_relaxed);
 
         // Edges are found at host rate and handed to the FIRST core step of this
         // sample: worst-case error is one core sample, 20.8 us. On hardware they
@@ -243,7 +236,14 @@ struct Ogham : Module {
         for (int i = 0; i < steps; i++) {
             in.syncEdge   = sync  && (i == 0);
             in.clockEdge  = clock && (i == 0);
-            in.menuToggle = in.menuToggle && (i == 0);
+            // Gestures are counts and the app accumulates them, so they must be
+            // delivered exactly once however many core steps this sample runs.
+            if (i > 0) {
+                in.encDelta = 0;
+                in.encClicks = 0;
+                in.encLongPresses = 0;
+                in.menuToggle = false;
+            }
             app.ProcessSample(in, out);
             const float channels[ogham::RateConverter::kChannels] = {
                 out.out1, out.out2, out.env };
@@ -254,14 +254,6 @@ struct Ogham : Module {
         outputs[OUT2_OUTPUT].setVoltage(conv.read(1) * kAudioVolts);
         outputs[ENV_OUTPUT].setVoltage(conv.read(2) * kEnvVolts);
         outputs[EOC_OUTPUT].setVoltage(conv.gate() ? kGateVolts : 0.f);
-
-        // A hold, or the right-click item, may have changed the mode; move the
-        // switch to match so the panel never disagrees with the display.
-        const bool appInMenu = app.InMenu();
-        if (appInMenu != lastEncMode) {
-            lastEncMode = appInMenu;
-            params[ENCMODE_PARAM].setValue(appInMenu ? 1.f : 0.f);
-        }
 
         // The encoder may have moved the selection; write it back to the params
         // so the panel, the tooltips and the patch all agree.
@@ -457,7 +449,8 @@ struct OghamWidget : ModuleWidget {
         enc->box.pos  = mm2px(Vec(37.0, 5.8));
         if (module) {
             enc->detents = &module->encDetents;
-            enc->pressed = &module->encPressed;
+            enc->clicks  = &module->encClicks;
+            enc->longs   = &module->encLongs;
         }
         addChild(enc);
 
@@ -482,10 +475,6 @@ struct OghamWidget : ModuleWidget {
 
         addParam(createParamCentered<CKSS>(
             mm2px(Vec(25.4, 75.0)), module, Ogham::MODE_PARAM));
-
-        // Encoder mode, next to the encoder it governs.
-        addParam(createParamCentered<CKSS>(
-            mm2px(Vec(44.5, 26.0)), module, Ogham::ENCMODE_PARAM));
 
         addInput(createInputCentered<PJ301MPort>(
             mm2px(Vec(8.0, 92.0)), module, Ogham::CV_A_INPUT));
@@ -516,7 +505,7 @@ struct OghamWidget : ModuleWidget {
         MenuToggleItem* toggle = new MenuToggleItem;
         toggle->module = m;
         toggle->text = m->app.InMenu() ? "Leave the Menu" : "Open the Menu";
-        toggle->rightText = "switch, or hold encoder";
+        toggle->rightText = "or hold the encoder";
         menu->addChild(toggle);
 
         // What the module can only show four digits of at a time.

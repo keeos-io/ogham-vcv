@@ -89,6 +89,26 @@ void click(ogham::OghamApp& app, ogham::AppInputs in, int holdMs) {
     runMs(app, in, 20);
 }
 
+// --- the plugin's path -----------------------------------------------------
+//
+// A mouse cannot supply a clean button, so the widget classifies the gesture and
+// hands over the result. These drive that path, which is the one the plugin
+// actually uses; the raw-button helpers above cover the path a real button takes.
+
+void clickEvent(ogham::OghamApp& app, ogham::AppInputs in) {
+    in.encClicks = 1;
+    ogham::AppOutputs out;
+    for (int n = 0; n < 48; n++) { app.ProcessSample(in, out); in.encClicks = 0; }
+    runMs(app, in, 20);
+}
+
+void longEvent(ogham::OghamApp& app, ogham::AppInputs in) {
+    in.encLongPresses = 1;
+    ogham::AppOutputs out;
+    for (int n = 0; n < 48; n++) { app.ProcessSample(in, out); in.encLongPresses = 0; }
+    runMs(app, in, 20);
+}
+
 }  // namespace
 
 int main() {
@@ -360,14 +380,80 @@ int main() {
     }
 
     // -----------------------------------------------------------------------
-    std::printf("Encoder mode switch\n");
+    // The whole gesture vocabulary, in order, on the path the plugin uses:
+    //
+    //   drag             change the function
+    //   click            select the other voice
+    //   hold             enter the menu
+    //   drag             change the menu item
+    //   click            edit that item
+    //   drag             change its value
+    //   click            back to item select
+    //   hold             back to function select
+    // -----------------------------------------------------------------------
+    std::printf("The gesture vocabulary\n");
     {
         ogham::OghamApp app;
         app.Init();
         ogham::AppInputs in = defaults();
 
+        // Read the defaults rather than assuming them: the engine boots Out 2
+        // on function 1, not 0, "so Out2 differs from Out1".
+        const int f2AtBoot = app.Formula2();
+        check(f2AtBoot == 1, "voice 2 boots on a different function to voice 1");
+
+        turn(app, in, +5);
+        check(app.Formula1() == 5, "a turn changes the function");
+        check(app.Formula2() == f2AtBoot, "and only the selected voice's");
+
+        clickEvent(app, in);
+        check(app.SelectedVoice() == 1, "a click selects the other voice");
+        turn(app, in, +3);
+        check(app.Formula2() == f2AtBoot + 3, "which the turn then changes");
+        check(app.Formula1() == 5, "leaving the first alone");
+
+        longEvent(app, in);
+        check(app.InMenu(), "a hold enters the menu");
+        check(!app.Editing(), "in item select");
+
+        turn(app, in, +4);
+        check(app.MenuField() == 4, "a turn changes the menu item");
+
+        clickEvent(app, in);
+        check(app.Editing(), "a click edits that item");
+        const int before = app.MenuValue(4);
+        turn(app, in, +6);
+        check(app.MenuValue(4) == before + 6, "a turn changes its value");
+        check(app.Editing(), "and stays in edit while it does");
+
+        turn(app, in, +2);
+        check(app.MenuValue(4) == before + 8, "turning again keeps changing it");
+        check(app.MenuField() == 4, "without wandering off the item");
+
+        clickEvent(app, in);
+        check(!app.Editing(), "a click returns to item select");
+        check(app.InMenu(), "still in the menu");
+        turn(app, in, -1);
+        check(app.MenuField() == 3, "where a turn moves items again");
+        check(app.MenuValue(4) == before + 8, "and the value it left is untouched");
+
+        longEvent(app, in);
+        check(!app.InMenu(), "a hold returns to function select");
+        turn(app, in, +1);
+        check(app.Formula2() == f2AtBoot + 4, "where a turn is a function again");
+    }
+
+    // -----------------------------------------------------------------------
+    std::printf("Restoring the mode directly\n");
+    {
+        // SetMenuMode is how a restored patch arrives in the right mode. The
+        // gesture path goes through the long press, above.
+        ogham::OghamApp app;
+        app.Init();
+        ogham::AppInputs in = defaults();
+
         app.SetMenuMode(true);
-        check(app.InMenu(), "the switch puts the encoder in the menu");
+        check(app.InMenu(), "restoring puts the encoder in the menu");
         check(!app.Editing(), "never arriving mid-edit");
 
         // The symptom that started this: enter edit, then turn, and keep
@@ -390,8 +476,8 @@ int main() {
         check(app.MenuValue(field) != before, "and the value follows the turns");
 
         app.SetMenuMode(false);
-        check(!app.InMenu(), "the switch takes it back to function select");
-        check(!app.Editing(), "and never leaves edit hanging");
+        check(!app.InMenu(), "and takes it back to function select");
+        check(!app.Editing(), "never leaving edit hanging");
     }
 
     // -----------------------------------------------------------------------

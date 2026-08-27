@@ -489,8 +489,11 @@ void OghamApp::HandleEncoder(const AppInputs& in, uint32_t nowMs) {
     const bool pressed = in.encPressed;
     bool gShort = false, gLong = false;
 
-    // A menu request from the right-click menu enters the same path as a long
-    // press, so there is one implementation of what entering the menu means.
+    // Gestures the host classified for us, and the right-click menu request,
+    // all join the same path — so there is one implementation of what a click
+    // and a long press mean, whoever noticed them.
+    if (clickPending_ > 0) { clickPending_ = 0; gShort = true; }
+    if (longPending_  > 0) { longPending_  = 0; gLong  = true; }
     if (in.menuToggle) gLong = true;
 
     if (pressed && !encWasPressed_) {            // press start
@@ -505,7 +508,7 @@ void OghamApp::HandleEncoder(const AppInputs& in, uint32_t nowMs) {
         encLongFired_ = true;
         gLong = true;                            // long press (while held)
     }
-    if (in.menuToggle) encLongFired_ = true;     // don't also fire on release
+    if (gLong) encLongFired_ = true;             // don't also fire on release
     if (!pressed && encWasPressed_ && !encLongFired_) {  // short release
         gShort = true;
     }
@@ -684,7 +687,9 @@ void OghamApp::UpdateDisplay(uint32_t nowMs) {
 // ---------------------------------------------------------------------------
 
 void OghamApp::ProcessSample(const AppInputs& in, AppOutputs& out) {
-    encPending_ += in.encDelta;
+    encPending_   += in.encDelta;
+    clickPending_ += in.encClicks;
+    longPending_  += in.encLongPresses;
 
     if (in.syncEdge) {
         engine_.SyncReset();

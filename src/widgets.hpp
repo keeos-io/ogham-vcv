@@ -126,33 +126,32 @@ struct SevenSegmentDisplay : Widget {
 // ---------------------------------------------------------------------------
 // The Func encoder.
 //
-// An endless control, so it has no value to show and no param behind it. It
-// converts dragging and scrolling into detents and pushes them at the module;
-// everything that decides what a detent MEANS — acceleration, long-press,
-// navigate versus edit — stays in the transcribed application layer, which is
-// what keeps the feel of the gesture the module's rather than Rack's.
+// An endless control, so it has no value to show and no param behind it.
 //
-// TURNING AND PRESSING ARE THE SAME MOUSE BUTTON, which the hardware never has
-// to deal with: on the module you turn the shaft with your fingers and press it
-// with your thumb, and the two cannot be confused. Reporting the mouse button
-// straight through made every turn begin with a press, so a slow turn crossed
-// the 600 ms long-press threshold and dropped into the menu, and a quick turn
-// released as a short click and switched voice.
+// On the module, turning and pressing are different fingers and cannot be
+// confused. With a mouse they are the same button, and what a press MEANS is not
+// knowable at the moment it happens — only afterwards, from what the pointer
+// does next. So this widget waits, classifies, and hands the module a decided
+// gesture; the transcribed application layer still decides what that gesture
+// means, which is what keeps the behaviour the module's.
 //
-// So the press is deferred and then decided by what the pointer does:
+//   press, then move            -> a turn. Detents, and nothing else, ever.
+//   press, hold still 600 ms    -> a long press. Fires once, while still held.
+//   press, release before that  -> a click.
+//   scroll wheel                -> detents, with no button involved at all.
 //
-//   moves past kMoveThreshold   -> a turn. No press is ever reported.
-//   held still past kHoldMs     -> a press. The app then times its own long
-//                                  press from there, so hold-to-enter works.
-//   released before either      -> a click. A press and release are emitted
-//                                  back to back so the app sees a short click.
-//
-// The result is that a drag never enters the menu and a click never turns.
+// Two earlier attempts got this wrong in ways worth recording, because both
+// looked correct until someone used them. Reporting the raw button meant every
+// turn began with a press, so a slow turn crossed the long-press threshold and
+// fell into the menu. Promoting a still button to a press after 140 ms meant a
+// drag that began after any pause was swallowed — you had to move immediately or
+// not at all, which is not how anyone uses a knob.
 // ---------------------------------------------------------------------------
 
 struct EncoderWidget : Widget {
-    std::atomic<int>*  detents = nullptr;
-    std::atomic<bool>* pressed = nullptr;
+    std::atomic<int>* detents = nullptr;
+    std::atomic<int>* clicks  = nullptr;
+    std::atomic<int>* longs   = nullptr;
 
     // Vertical travel per detent, in pixels. Tuned so a comfortable drag steps
     // about one function at a time and a fast flick crosses the bank — the same
@@ -160,84 +159,54 @@ struct EncoderWidget : Widget {
     // against a real module by turning both.
     static constexpr float kPixelsPerDetent = 8.f;
 
-    // How far the pointer must move before a press is reinterpreted as a turn,
-    // in pixels: enough to survive the shake of clicking, far less than a
-    // deliberate drag.
+    // How far the pointer must move before the gesture is a turn, in pixels:
+    // enough to survive the shake of clicking, far less than a deliberate drag.
     static constexpr float kMoveThreshold = 3.f;
 
-    // How long the button must be held still before it counts as a press. Well
-    // under the app's 600 ms long-press, so holding still still reaches the menu
-    // without a perceptible delay.
-    static constexpr double kHoldMs = 140.0;
+    // The module's own hold threshold. Kept identical so the gesture takes the
+    // same time here as on the panel.
+    static constexpr double kLongPressSec = 0.6;
 
-    // How long a click's press is held before it is released, in seconds. It has
-    // to outlast at least one of the app's 1 kHz control ticks, and be shorter
-    // than the 600 ms that would make it a long press.
-    static constexpr double kClickHoldSec = 0.03;
-
-    // What this gesture has turned out to be. A gesture is undecided until the
-    // pointer moves or the clock runs out, which is the whole point: turning and
-    // pressing share one mouse button, and the hardware never has to tell them
-    // apart because a thumb and fingers cannot be confused.
-    enum class Gesture { None, Undecided, Pressing, Turning, Clicking };
-    Gesture gesture = Gesture::None;
-
-    double gestureStart = 0.0;
-    double clickUntil   = 0.0;
+    bool   armed = false;      // button down, gesture not yet decided
+    bool   turning = false;
+    bool   longFired = false;
+    double downTime = 0.0;
     float  travel = 0.f;
-    float  accum  = 0.f;
+    float  accum = 0.f;
 
-    void push(int n) {
+    void pushDetents(int n) {
         if (detents && n != 0) detents->fetch_add(n, std::memory_order_relaxed);
-    }
-    void setPressed(bool v) {
-        if (pressed) pressed->store(v, std::memory_order_relaxed);
-    }
-
-    // Finish a click that is still being held out. Called before anything else
-    // starts, so the app always sees a clean press-then-release pair and never a
-    // stray release in the middle of the next gesture — which is what made a
-    // click followed quickly by a turn read as two clicks, and toggled the menu
-    // field's edit mode straight back off.
-    void endClick() {
-        if (gesture == Gesture::Clicking) {
-            setPressed(false);
-            gesture = Gesture::None;
-        }
     }
 
     void onButton(const event::Button& e) override {
-        if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-            endClick();
-            gesture = Gesture::Undecided;
-            gestureStart = system::getTime();
+        if (e.button != GLFW_MOUSE_BUTTON_LEFT) { Widget::onButton(e); return; }
+
+        if (e.action == GLFW_PRESS) {
+            armed = true;
+            turning = false;
+            longFired = false;
+            downTime = system::getTime();
             travel = 0.f;
             accum = 0.f;
             e.consume(this);
-        } else if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
-            if (gesture == Gesture::Pressing) {
-                setPressed(false);
-                gesture = Gesture::None;
-            } else if (gesture == Gesture::Undecided) {
-                // Never moved, never held long enough: a click.
-                setPressed(true);
-                gesture = Gesture::Clicking;
-                clickUntil = system::getTime() + kClickHoldSec;
-            } else if (gesture == Gesture::Turning) {
-                gesture = Gesture::None;
-            }
+        } else if (e.action == GLFW_RELEASE) {
+            // A click is a press that never became anything else.
+            if (armed && !turning && !longFired && clicks)
+                clicks->fetch_add(1, std::memory_order_relaxed);
+            armed = false;
+            turning = false;
         }
         Widget::onButton(e);
     }
 
     void step() override {
-        const double now = system::getTime();
-        if (gesture == Gesture::Clicking && now >= clickUntil) {
-            endClick();
-        } else if (gesture == Gesture::Undecided &&
-                   (now - gestureStart) * 1000.0 >= kHoldMs) {
-            gesture = Gesture::Pressing;
-            setPressed(true);
+        // A long press fires while the button is still down, as it does on the
+        // module — you feel the mode change under your thumb rather than on
+        // release. It cannot fire once the gesture has become a turn.
+        if (armed && !turning && !longFired &&
+            (system::getTime() - downTime) >= kLongPressSec) {
+            longFired = true;
+            if (longs) longs->fetch_add(1, std::memory_order_relaxed);
         }
         Widget::step();
     }
@@ -249,30 +218,40 @@ struct EncoderWidget : Widget {
 
     void onDragEnd(const event::DragEnd& e) override {
         APP->window->cursorUnlock();
+        armed = false;
+        turning = false;
         Widget::onDragEnd(e);
     }
 
     void onDragMove(const event::DragMove& e) override {
-        if (gesture == Gesture::Undecided) {
+        // Movement makes it a turn — at any point, not only in the first
+        // moments. A press, a pause, then a drag is a turn, because that is what
+        // it looks like to the person doing it. Once the long press has fired the
+        // gesture is settled and dragging does nothing, matching a module whose
+        // menu you have just entered with the shaft still under your thumb.
+        if (armed && !longFired) {
             travel += std::fabs(e.mouseDelta.y) + std::fabs(e.mouseDelta.x);
-            if (travel > kMoveThreshold) gesture = Gesture::Turning;
+            if (!turning && travel > kMoveThreshold) turning = true;
         }
-        if (gesture == Gesture::Turning) {
+        if (turning) {
             // Up is clockwise, matching every other knob in Rack.
             accum += -e.mouseDelta.y / kPixelsPerDetent;
             const int whole = (int)accum;
             if (whole != 0) {
                 accum -= (float)whole;
-                push(whole);
+                pushDetents(whole);
             }
         }
         Widget::onDragMove(e);
     }
 
     void onHoverScroll(const event::HoverScroll& e) override {
+        // The wheel stands in for a drag anywhere a drag would turn the encoder,
+        // and touches the button not at all — which makes it the unambiguous way
+        // to turn, and the one to reach for while editing a menu value.
         const int n = (e.scrollDelta.y > 0.f) ? 1 : (e.scrollDelta.y < 0.f ? -1 : 0);
         if (n != 0) {
-            push(n);
+            pushDetents(n);
             e.consume(this);
         }
         Widget::onHoverScroll(e);
@@ -287,6 +266,7 @@ struct EncoderWidget : Widget {
         nvgStrokeColor(args.vg, nvgRGB(0x3b, 0x46, 0x49));
         nvgStrokeWidth(args.vg, 1.f);
         nvgStroke(args.vg);
+
         // Knurling: a ring of ticks, so it reads as a thing you turn rather than
         // a thing you point.
         for (int i = 0; i < 24; i++) {
@@ -300,15 +280,30 @@ struct EncoderWidget : Widget {
             nvgStrokeWidth(args.vg, 0.8f);
             nvgStroke(args.vg);
         }
-        // Cap. It lights while the button is genuinely held, which is the only
-        // feedback that a hold is being counted rather than a turn beginning.
-        const bool held = (gesture == Gesture::Pressing || gesture == Gesture::Clicking);
+
+        // The cap shows what the gesture has become: amber while a hold is being
+        // counted towards the menu, and the hold's progress as a ring, so it is
+        // clear whether you are about to change mode or about to turn.
+        NVGcolor cap = nvgRGB(0x23, 0x2b, 0x2e);
+        if (turning)        cap = nvgRGB(0x2a, 0x33, 0x36);
+        else if (longFired) cap = nvgRGB(0x3a, 0x44, 0x33);
+        else if (armed)     cap = nvgRGB(0x33, 0x2e, 0x22);
         nvgBeginPath(args.vg);
         nvgCircle(args.vg, r, r, r * 0.6f);
-        nvgFillColor(args.vg, held ? nvgRGB(0x3a, 0x44, 0x33)
-                   : (gesture == Gesture::Turning) ? nvgRGB(0x2a, 0x33, 0x36)
-                                                   : nvgRGB(0x23, 0x2b, 0x2e));
+        nvgFillColor(args.vg, cap);
         nvgFill(args.vg);
+
+        if (armed && !turning && !longFired) {
+            const float t = (float)((system::getTime() - downTime) / kLongPressSec);
+            if (t > 0.05f) {
+                nvgBeginPath(args.vg);
+                nvgArc(args.vg, r, r, r * 0.78f, -M_PI * 0.5f,
+                       -M_PI * 0.5f + std::min(t, 1.f) * 2.f * M_PI, NVG_CW);
+                nvgStrokeColor(args.vg, nvgRGB(0xb0, 0x8d, 0x3f));
+                nvgStrokeWidth(args.vg, 1.6f);
+                nvgStroke(args.vg);
+            }
+        }
     }
 };
 

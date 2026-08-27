@@ -101,11 +101,30 @@ struct AppInputs {
     bool  clockEdge = false;
 
     // The Func encoder. `encDelta` is detents since the last control tick,
-    // signed; `encPressed` is the button's current state. Acceleration and
-    // long-press timing are NOT done by the host — they live in the app, so the
-    // gesture curves are the module's own.
+    // signed. Acceleration is NOT done by the host — it lives in the app, so the
+    // curves are the module's own.
     int   encDelta   = 0;
-    bool  encPressed = false;
+
+    // The button, two ways.
+    //
+    // `encPressed` is the raw button, which is what the module's firmware reads
+    // and what this class derives its own short and long presses from. A host
+    // with a real button uses it.
+    //
+    // `encClicks` and `encLongPresses` are already-classified gestures, for a
+    // host that cannot supply a clean button — which a mouse cannot, because the
+    // same button that presses the encoder is also the one that turns it. On the
+    // module those are different fingers; with a mouse, holding still to enter
+    // the menu is indistinguishable from beginning a drag until you know what
+    // happens next. The widget, which has the pointer, decides; this class still
+    // decides what a click MEANS.
+    //
+    // Counts rather than flags: the app polls at 1 kHz and the host runs at the
+    // sample rate, so an event delivered on the wrong sample would otherwise be
+    // dropped.
+    bool  encPressed      = false;
+    int   encClicks       = 0;
+    int   encLongPresses  = 0;
 
     // A request to enter or leave the menu without holding the encoder — the
     // right-click equivalent of a long press. Consumed once, like the edges.
@@ -149,14 +168,9 @@ public:
     bool InMenu() const { return funcMode_ == FUNC_FX; }
     bool Editing() const { return fxEditing_; }
 
-    // Put the encoder into function-select or menu mode directly.
-    //
-    // On the module the only way between them is a 600 ms hold, because there is
-    // no panel space for a switch and a thumb makes the gesture easy. With a
-    // mouse it is neither easy nor visible: you cannot see which mode you are in
-    // until the display tells you, and holding the button still is the same
-    // action that begins a turn. The plugin therefore has a switch, and this is
-    // what it drives. The hold still works — it moves the switch.
+    // Put the encoder into function-select or menu mode directly. Used when a
+    // patch is restored; the gesture path goes through the long press, as the
+    // module's does.
     void SetMenuMode(bool inMenu) {
         const FuncMode want = inMenu ? FUNC_FX : FUNC_SELECT;
         if (want == funcMode_) return;
@@ -245,6 +259,8 @@ private:
     // Accumulating here rather than host-side is what stops a detent being
     // dropped on the 47 samples out of 48 where Poll does not fire.
     int      encPending_ = 0;
+    int      clickPending_ = 0;
+    int      longPending_  = 0;
 
     // Cheap change detection for the setters that are not cheap.
     float    lastToneApplied_ = -1.f;
