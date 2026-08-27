@@ -179,8 +179,16 @@ public:
     }
 
     // The value the menu would show for a field — the display needs it, and so
-    // does a right-click mirror of the menu later.
+    // does the right-click mirror.
     int  MenuValue(int field) const;
+
+    // Write a field directly, as the right-click mirror does. Only the byte is
+    // written here; the coefficients are recomputed on the audio thread at the
+    // next control tick, because SetFxChain touches a great deal of state the
+    // audio thread is reading. Safe from another thread for exactly that reason:
+    // a single byte, and nothing derived from it until the audio thread says so.
+    void SetMenuValue(int field, int value);
+    void RequestFxApply() { fxApplyPending_ = true; }
 
     int  Formula1() const { return engine_.GetFormula1Index(); }
     int  Formula2() const { return engine_.GetFormula2Index(); }
@@ -259,6 +267,7 @@ private:
     // Accumulating here rather than host-side is what stops a detent being
     // dropped on the 47 samples out of 48 where Poll does not fire.
     int      encPending_ = 0;
+    bool     fxApplyPending_ = false;
     int      clickPending_ = 0;
     int      longPending_  = 0;
 

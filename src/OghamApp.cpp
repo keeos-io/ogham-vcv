@@ -137,6 +137,8 @@ inline uint32_t Median3(uint32_t a, uint32_t b, uint32_t c) {
 
 inline float Clamp01(float v) { return v < 0.f ? 0.f : (v > 1.f ? 1.f : v); }
 
+inline int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
 // The menu's field index to the config byte it edits. Returns nullptr for the
 // global on/off (0) and the chain toggle (1), which are handled by name.
 uint8_t* FxFieldPtr(FxChainConfig& f, int field) {
@@ -426,6 +428,13 @@ void OghamApp::PollControls(const AppInputs& in) {
         pipeline_.SetLofiMacro(lofiPot);   // computes coefficients: change only
     }
 
+    // A field written from the right-click mirror: recompute here, on the audio
+    // thread, rather than wherever the click happened.
+    if (fxApplyPending_) {
+        fxApplyPending_ = false;
+        ApplyFxChain();
+    }
+
     // --- Out2 decouple/drone. Idempotent: the engine only snapshots Out2 on the
     //     couple->decouple edge, so calling every loop is safe and also applies
     //     restored state. ---
@@ -641,6 +650,28 @@ int OghamApp::MenuValue(int field) const {
     if (field == FX_FIELD_CVHOLD)     return (fx_.cvHold == 0) ? 0 : (1 << fx_.cvHold);
     const uint8_t* p = FxFieldPtr(const_cast<FxChainConfig&>(fx_), field);
     return p ? *p : 0;
+}
+
+void OghamApp::SetMenuValue(int field, int value) {
+    switch (field) {
+        case FX_FIELD_GLOBAL:      fx_.enabled       = value ? 1 : 0; break;
+        case FX_FIELD_CHAIN:       fx_.parallel      = value ? 1 : 0; break;
+        case FX_FIELD_CVOUT:       fx_.cvOutMode     = (uint8_t)clampi(value, 0, 3); break;
+        case FX_FIELD_CVSLEWRISE:  fx_.cvSlewRise    = (uint8_t)clampi(value, 0, 99); break;
+        case FX_FIELD_CVSLEWFALL:  fx_.cvSlewFall    = (uint8_t)clampi(value, 0, 99); break;
+        case FX_FIELD_CVHOLD:      fx_.cvHold        = (uint8_t)clampi(value, 0, 8); break;
+        case FX_FIELD_LPG:         fx_.lpgDecay      = (uint8_t)clampi(value, 0, 99); break;
+        case FX_FIELD_TIMBRECV:    fx_.timbreCvRoute = (uint8_t)clampi(value, 0, 2); break;
+        case FX_FIELD_QUANT:       fx_.paramQuant    = (uint8_t)clampi(value, 0, 128); break;
+        case FX_FIELD_DRONE:       fx_.out2Drone     = value ? 1 : 0; break;
+        default: {
+            uint8_t* p = FxFieldPtr(fx_, field);
+            if (!p) return;
+            const int maxv = FxFieldIsType(field) ? FX_TYPE_MAX : 99;
+            *p = (uint8_t)clampi(value, 0, maxv);
+        } break;
+    }
+    fxApplyPending_ = true;
 }
 
 void OghamApp::SetMenuField(int f) {

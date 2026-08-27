@@ -26,6 +26,7 @@
 
 #include "OghamApp.hpp"
 #include "widgets.hpp"
+#include "menu/FxMenu.hpp"
 #include "formulas.h"
 #include "ogham_clock.h"
 
@@ -417,6 +418,72 @@ struct MenuToggleItem : MenuItem {
     }
 };
 
+// A numeric menu field, driven by a slider. The byte is written straight into
+// the app; the coefficients are recomputed on the audio thread at the next
+// control tick — see OghamApp::SetMenuValue.
+struct FxFieldQuantity : Quantity {
+    Ogham* module = nullptr;
+    int field = 0;
+    int maxValue = 99;
+
+    void setValue(float v) override {
+        if (module) module->app.SetMenuValue(field, (int)std::round(clamp(v, 0.f, (float)maxValue)));
+    }
+    float getValue() override {
+        return module ? (float)module->app.MenuValue(field) : 0.f;
+    }
+    float getMinValue() override { return 0.f; }
+    float getMaxValue() override { return (float)maxValue; }
+    float getDefaultValue() override { return 0.f; }
+    std::string getLabel() override { return ogham::FieldSpecs()[field].name; }
+    std::string getDisplayValueString() override {
+        return string::f("%d", (int)getValue());
+    }
+    std::string getUnit() override { return ""; }
+};
+
+struct FxFieldSlider : ui::Slider {
+    FxFieldSlider(Ogham* module, int field, int maxValue) {
+        FxFieldQuantity* q = new FxFieldQuantity;
+        q->module = module;
+        q->field = field;
+        q->maxValue = maxValue;
+        quantity = q;
+        box.size.x = 220.f;
+    }
+    ~FxFieldSlider() override { delete quantity; }
+};
+
+// One menu field, presented the way its values want to be: named options where
+// there is a small set of them, a slider where it is a number.
+inline MenuItem* createFieldItem(Ogham* module, int field) {
+    const ogham::FieldSpec& spec = ogham::FieldSpecs()[field];
+    const int value = module->app.MenuValue(field);
+
+    if (field == FX_FIELD_QUANT) {
+        // Stored as the grid step itself, not an index.
+        const std::vector<uint8_t>& steps = ogham::QuantSteps();
+        int idx = 0;
+        for (size_t i = 0; i < steps.size(); i++) if (steps[i] == value) idx = (int)i;
+        return createIndexSubmenuItem(spec.name, spec.options,
+            [=]() { return idx; },
+            [=](int i) { module->app.SetMenuValue(field, ogham::QuantSteps()[i]); });
+    }
+
+    if (!spec.options.empty()) {
+        return createIndexSubmenuItem(spec.name, spec.options,
+            [=]() { return module->app.MenuValue(field); },
+            [=](int i) { module->app.SetMenuValue(field, i); });
+    }
+
+    return createSubmenuItem(spec.name, string::f("%d", value),
+        [=](Menu* sub) {
+            if (spec.detail && spec.detail[0])
+                sub->addChild(createMenuLabel(spec.detail));
+            sub->addChild(new FxFieldSlider(module, field, spec.max));
+        });
+}
+
 // ---------------------------------------------------------------------------
 // Widget — placeholder. Phase 4 replaces the panel and every component with the
 // module's own artwork; the VCV Component Library parts used here are CC BY-NC
@@ -500,7 +567,41 @@ struct OghamWidget : ModuleWidget {
         if (!m) return;
 
         menu->addChild(new MenuSeparator);
-        menu->addChild(createMenuLabel("Ogham"));
+
+        // --- Functions -----------------------------------------------------
+        // The module can only show you a number, and only the one you are on.
+        // Here is the whole bank, by character and by name.
+        for (int voice = 0; voice < 2; voice++) {
+            const int paramId = voice == 0 ? Ogham::FUNC1_PARAM : Ogham::FUNC2_PARAM;
+            const int current = (int)std::round(m->params[paramId].getValue());
+            menu->addChild(createSubmenuItem(
+                string::f("Voice %d function", voice + 1),
+                FunctionLabel(current),
+                [=](Menu* sub) {
+                    for (const ogham::Category& cat : ogham::kCategories) {
+                        sub->addChild(createSubmenuItem(cat.name,
+                            (current >= cat.first && current <= cat.last)
+                                ? string::f("F%02d", current) : "",
+                            [=](Menu* list) {
+                                for (int i = cat.first; i <= cat.last; i++) {
+                                    list->addChild(createCheckMenuItem(
+                                        ogham::FunctionLabelFor(i), "",
+                                        [=]() { return current == i; },
+                                        [=]() { m->params[paramId].setValue((float)i); }));
+                                }
+                            }));
+                    }
+                    sub->addChild(new MenuSeparator);
+                    const int ref = GetReferenceIndex();
+                    sub->addChild(createCheckMenuItem(
+                        ogham::FunctionLabelFor(ref), "440 Hz",
+                        [=]() { return current == ref; },
+                        [=]() { m->params[paramId].setValue((float)ref); }));
+                }));
+        }
+
+        // --- The Menu ------------------------------------------------------
+        menu->addChild(new MenuSeparator);
 
         MenuToggleItem* toggle = new MenuToggleItem;
         toggle->module = m;
@@ -508,16 +609,31 @@ struct OghamWidget : ModuleWidget {
         toggle->rightText = "or hold the encoder";
         menu->addChild(toggle);
 
-        // What the module can only show four digits of at a time.
+        menu->addChild(createSubmenuItem("Settings",
+            string::f("%d fields", FX_NUM_FIELDS),
+            [=](Menu* sub) {
+                sub->addChild(createMenuLabel("Everything behind the four digits"));
+                for (int f = 0; f < FX_NUM_FIELDS; f++) {
+                    if (f == 2 || f == 6 || f == 10 || f == FX_FIELD_CVOUT)
+                        sub->addChild(new MenuSeparator);
+                    sub->addChild(createFieldItem(m, f));
+                }
+            }));
+
+        // --- State ---------------------------------------------------------
+        menu->addChild(new MenuSeparator);
         if (m->app.InMenu()) {
+            const ogham::FieldSpec& spec = ogham::FieldSpecs()[m->app.MenuField()];
             menu->addChild(createMenuLabel(
-                string::f("Field %d of %d, value %d",
-                          m->app.MenuField() + 1, FX_NUM_FIELDS,
-                          m->app.MenuValue(m->app.MenuField()))));
+                string::f("On %s%s", spec.name, m->app.Editing() ? ", editing" : "")));
         } else {
             menu->addChild(createMenuLabel(
-                string::f("Editing voice %d", m->app.SelectedVoice() + 1)));
+                string::f("Encoder is editing voice %d", m->app.SelectedVoice() + 1)));
         }
+        menu->addChild(createMenuLabel(
+            m->app.ExternalClock() ? string::f("Clocked, %.2f x", m->app.Rate())
+          : m->app.ClockHeld()     ? string::f("Clock held, %.2f x", m->app.Rate())
+                                   : string::f("Free running, %.2f x", m->app.Rate())));
     }
 };
 
