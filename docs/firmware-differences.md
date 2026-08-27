@@ -148,3 +148,13 @@ plugin. Anything added to the shim has to build under both.
 **`arch.mk` asks `$(CC) -dumpmachine`,** and make's built-in default for `CC` is
 `cc`, which a WinLibs or MinGW toolchain does not ship. The Makefile overrides
 the built-in default only, so an environment or command-line setting still wins.
+
+**Rack does not deliver a button release while the cursor is locked.**
+`EventState::handleButton` skips dispatching `ButtonEvent` entirely when
+`isCursorLocked()`, and the encoder locks the cursor on drag start so the pointer
+stays put while you turn. The press arrives (the lock is not yet taken), the
+release never does. `DragEnd` is dispatched either way, so that is where the end
+of a gesture has to be detected.
+
+This is what made clicks disappear while turning and holding both worked, and it
+is not visible in the widget's own logic — only in Rack's event dispatcher.

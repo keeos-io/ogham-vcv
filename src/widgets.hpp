@@ -178,6 +178,24 @@ struct EncoderWidget : Widget {
         if (detents && n != 0) detents->fetch_add(n, std::memory_order_relaxed);
     }
 
+    // The gesture is over: if it never became a turn or a hold, it was a click.
+    //
+    // This has to run from onDragEnd, not from the button release, and that is
+    // not a stylistic choice. Rack skips dispatching ButtonEvent entirely while
+    // the cursor is locked (EventState::handleButton), and this widget locks the
+    // cursor on drag start so the pointer stays put while you turn — so the
+    // release is simply never delivered here. DragEnd always is. Clicks vanished
+    // for exactly that reason: turning worked, holding worked, and clicking did
+    // nothing at all.
+    //
+    // `armed` is the one-shot latch, so the two paths cannot both fire.
+    void endGesture() {
+        if (armed && !turning && !longFired && clicks)
+            clicks->fetch_add(1, std::memory_order_relaxed);
+        armed = false;
+        turning = false;
+    }
+
     void onButton(const event::Button& e) override {
         if (e.button != GLFW_MOUSE_BUTTON_LEFT) { Widget::onButton(e); return; }
 
@@ -190,11 +208,8 @@ struct EncoderWidget : Widget {
             accum = 0.f;
             e.consume(this);
         } else if (e.action == GLFW_RELEASE) {
-            // A click is a press that never became anything else.
-            if (armed && !turning && !longFired && clicks)
-                clicks->fetch_add(1, std::memory_order_relaxed);
-            armed = false;
-            turning = false;
+            // Reached only when the cursor is NOT locked; see endGesture.
+            endGesture();
         }
         Widget::onButton(e);
     }
@@ -218,8 +233,7 @@ struct EncoderWidget : Widget {
 
     void onDragEnd(const event::DragEnd& e) override {
         APP->window->cursorUnlock();
-        armed = false;
-        turning = false;
+        endGesture();
         Widget::onDragEnd(e);
     }
 
