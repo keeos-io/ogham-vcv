@@ -26,6 +26,7 @@
     <text x="37.8" y="51.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">B</text>
     <text x="13.0" y="69.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">RATE</text>
     <text x="37.8" y="69.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.6" text-anchor="middle">TONE</text>
+    <text x="44.5" y="22.0" fill="#c9d2d0" font-family="sans-serif" font-size="2.0" text-anchor="middle">FUNC/MENU</text>
     <text x="25.4" y="84.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.4" text-anchor="middle">CLK / VOCT</text>
 
     <text x="8.0"  y="86.5" fill="#c9d2d0" font-family="sans-serif" font-size="2.4" text-anchor="middle">CV A</text>
@@ -50,6 +51,7 @@
     <circle cx="13.0" cy="62.0" r="4"/>
     <circle cx="37.8" cy="62.0" r="4"/>
     <circle cx="25.4" cy="78.0" r="3"/>
+    <circle cx="44.5" cy="26.0" r="3"/>
     <circle cx="8.0"  cy="92.0" r="4"/>
     <circle cx="19.6" cy="92.0" r="4"/>
     <circle cx="31.2" cy="92.0" r="4"/>

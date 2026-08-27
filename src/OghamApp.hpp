@@ -149,6 +149,21 @@ public:
     bool InMenu() const { return funcMode_ == FUNC_FX; }
     bool Editing() const { return fxEditing_; }
 
+    // Put the encoder into function-select or menu mode directly.
+    //
+    // On the module the only way between them is a 600 ms hold, because there is
+    // no panel space for a switch and a thumb makes the gesture easy. With a
+    // mouse it is neither easy nor visible: you cannot see which mode you are in
+    // until the display tells you, and holding the button still is the same
+    // action that begins a turn. The plugin therefore has a switch, and this is
+    // what it drives. The hold still works — it moves the switch.
+    void SetMenuMode(bool inMenu) {
+        const FuncMode want = inMenu ? FUNC_FX : FUNC_SELECT;
+        if (want == funcMode_) return;
+        funcMode_ = want;
+        fxEditing_ = false;   // never arrive, or leave, mid-edit
+    }
+
     // The value the menu would show for a field — the display needs it, and so
     // does a right-click mirror of the menu later.
     int  MenuValue(int field) const;

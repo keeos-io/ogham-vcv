@@ -110,6 +110,7 @@ struct Ogham : Module {
         A_PARAM, B_PARAM,
         RATE_PARAM, TONE_PARAM,
         MODE_PARAM,
+        ENCMODE_PARAM,
         PARAMS_LEN
     };
     enum InputId {
@@ -139,6 +140,7 @@ struct Ogham : Module {
     std::atomic<uint32_t> displaySegments{0};
 
     int lastFunc1 = -1, lastFunc2 = -1;
+    bool lastEncMode = false;
 
     Ogham() {
         config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -156,6 +158,12 @@ struct Ogham : Module {
         configParam<RateQuantity>(RATE_PARAM, 0.f, 1.f, 0.5f, "Rate");
         configParam<ToneQuantity>(TONE_PARAM, 0.f, 1.f, 0.5f, "Tone");
         configSwitch(MODE_PARAM, 0.f, 1.f, 0.f, "Mode", {"Clock", "V/oct"});
+
+        // What the encoder does. The module has no such switch — a 600 ms hold
+        // is the only way across — but a hold is a poor gesture with a mouse and
+        // an invisible piece of state either way. See OghamApp::SetMenuMode.
+        configSwitch(ENCMODE_PARAM, 0.f, 1.f, 0.f, "Encoder",
+                     {"Function select", "Menu"});
 
         configInput(CV_A_INPUT, "Parameter A CV");
         configInput(CV_B_INPUT, "Parameter B CV");
@@ -195,6 +203,16 @@ struct Ogham : Module {
         if (f1 != lastFunc1) { lastFunc1 = f1; app.SetFormula1(f1); }
         const int f2 = (int)std::round(params[FUNC2_PARAM].getValue());
         if (f2 != lastFunc2) { lastFunc2 = f2; app.SetFormula2(f2); }
+
+        // The encoder's mode is a switch here rather than a hidden hold. It
+        // binds both ways, like the function slots: moving the switch changes
+        // the mode, and a hold on the encoder (or the right-click item) moves
+        // the switch, so there is only ever one answer to which mode you are in.
+        const bool switchWantsMenu = params[ENCMODE_PARAM].getValue() > 0.5f;
+        if (switchWantsMenu != lastEncMode) {
+            lastEncMode = switchWantsMenu;
+            app.SetMenuMode(switchWantsMenu);
+        }
 
         ogham::AppInputs in;
         in.potA      = params[A_PARAM].getValue();
@@ -236,6 +254,14 @@ struct Ogham : Module {
         outputs[OUT2_OUTPUT].setVoltage(conv.read(1) * kAudioVolts);
         outputs[ENV_OUTPUT].setVoltage(conv.read(2) * kEnvVolts);
         outputs[EOC_OUTPUT].setVoltage(conv.gate() ? kGateVolts : 0.f);
+
+        // A hold, or the right-click item, may have changed the mode; move the
+        // switch to match so the panel never disagrees with the display.
+        const bool appInMenu = app.InMenu();
+        if (appInMenu != lastEncMode) {
+            lastEncMode = appInMenu;
+            params[ENCMODE_PARAM].setValue(appInMenu ? 1.f : 0.f);
+        }
 
         // The encoder may have moved the selection; write it back to the params
         // so the panel, the tooltips and the patch all agree.
@@ -457,6 +483,10 @@ struct OghamWidget : ModuleWidget {
         addParam(createParamCentered<CKSS>(
             mm2px(Vec(25.4, 75.0)), module, Ogham::MODE_PARAM));
 
+        // Encoder mode, next to the encoder it governs.
+        addParam(createParamCentered<CKSS>(
+            mm2px(Vec(44.5, 26.0)), module, Ogham::ENCMODE_PARAM));
+
         addInput(createInputCentered<PJ301MPort>(
             mm2px(Vec(8.0, 92.0)), module, Ogham::CV_A_INPUT));
         addInput(createInputCentered<PJ301MPort>(
@@ -486,7 +516,7 @@ struct OghamWidget : ModuleWidget {
         MenuToggleItem* toggle = new MenuToggleItem;
         toggle->module = m;
         toggle->text = m->app.InMenu() ? "Leave the Menu" : "Open the Menu";
-        toggle->rightText = "hold encoder";
+        toggle->rightText = "switch, or hold encoder";
         menu->addChild(toggle);
 
         // What the module can only show four digits of at a time.

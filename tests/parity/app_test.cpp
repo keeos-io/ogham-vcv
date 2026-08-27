@@ -360,6 +360,41 @@ int main() {
     }
 
     // -----------------------------------------------------------------------
+    std::printf("Encoder mode switch\n");
+    {
+        ogham::OghamApp app;
+        app.Init();
+        ogham::AppInputs in = defaults();
+
+        app.SetMenuMode(true);
+        check(app.InMenu(), "the switch puts the encoder in the menu");
+        check(!app.Editing(), "never arriving mid-edit");
+
+        // The symptom that started this: enter edit, then turn, and keep
+        // turning. Every detent must land on the value, and none of them may
+        // fall back out of edit.
+        //
+        // On a field with a range, not field 0 — that one is the global on/off,
+        // which is already on, so turning it clockwise is a no-op and would
+        // prove nothing.
+        turn(app, in, +2);
+        const int field = app.MenuField();
+        check(field == 2, "navigated to a field with a range");
+        click(app, in, 50);
+        check(app.Editing(), "a click enters edit");
+        const int before = app.MenuValue(field);
+        turn(app, in, +1);
+        turn(app, in, +1);
+        turn(app, in, +1);
+        check(app.Editing(), "turning does not fall out of edit");
+        check(app.MenuValue(field) != before, "and the value follows the turns");
+
+        app.SetMenuMode(false);
+        check(!app.InMenu(), "the switch takes it back to function select");
+        check(!app.Editing(), "and never leaves edit hanging");
+    }
+
+    // -----------------------------------------------------------------------
     std::printf("Display\n");
     {
         ogham::OghamApp app;

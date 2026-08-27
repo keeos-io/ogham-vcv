@@ -170,13 +170,22 @@ struct EncoderWidget : Widget {
     // without a perceptible delay.
     static constexpr double kHoldMs = 140.0;
 
-    float  accum = 0.f;
-    bool   dragging = false;
-    bool   buttonDown = false;
-    bool   holding = false;        // a press has been reported
-    bool   turned = false;         // the pointer moved: this gesture is a turn
-    float  travel = 0.f;           // total movement since the button went down
-    double downTime = 0.0;
+    // How long a click's press is held before it is released, in seconds. It has
+    // to outlast at least one of the app's 1 kHz control ticks, and be shorter
+    // than the 600 ms that would make it a long press.
+    static constexpr double kClickHoldSec = 0.03;
+
+    // What this gesture has turned out to be. A gesture is undecided until the
+    // pointer moves or the clock runs out, which is the whole point: turning and
+    // pressing share one mouse button, and the hardware never has to tell them
+    // apart because a thumb and fingers cannot be confused.
+    enum class Gesture { None, Undecided, Pressing, Turning, Clicking };
+    Gesture gesture = Gesture::None;
+
+    double gestureStart = 0.0;
+    double clickUntil   = 0.0;
+    float  travel = 0.f;
+    float  accum  = 0.f;
 
     void push(int n) {
         if (detents && n != 0) detents->fetch_add(n, std::memory_order_relaxed);
@@ -185,67 +194,70 @@ struct EncoderWidget : Widget {
         if (pressed) pressed->store(v, std::memory_order_relaxed);
     }
 
+    // Finish a click that is still being held out. Called before anything else
+    // starts, so the app always sees a clean press-then-release pair and never a
+    // stray release in the middle of the next gesture — which is what made a
+    // click followed quickly by a turn read as two clicks, and toggled the menu
+    // field's edit mode straight back off.
+    void endClick() {
+        if (gesture == Gesture::Clicking) {
+            setPressed(false);
+            gesture = Gesture::None;
+        }
+    }
+
     void onButton(const event::Button& e) override {
         if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_PRESS) {
-            downTime = system::getTime();
-            buttonDown = true;
+            endClick();
+            gesture = Gesture::Undecided;
+            gestureStart = system::getTime();
             travel = 0.f;
-            turned = false;
-            holding = false;
-            e.consume(this);        // deferred: nothing is reported yet
+            accum = 0.f;
+            e.consume(this);
         } else if (e.button == GLFW_MOUSE_BUTTON_LEFT && e.action == GLFW_RELEASE) {
-            if (holding) {
-                setPressed(false);          // a real press ends
-            } else if (!turned) {
-                // Never moved, never held long enough: a click. Emit the press
-                // and let step() release it a frame later, so the app sees a
-                // press and a release rather than one impossible instant.
+            if (gesture == Gesture::Pressing) {
+                setPressed(false);
+                gesture = Gesture::None;
+            } else if (gesture == Gesture::Undecided) {
+                // Never moved, never held long enough: a click.
                 setPressed(true);
-                holding = true;
-                clickRelease = 2;           // frames
+                gesture = Gesture::Clicking;
+                clickUntil = system::getTime() + kClickHoldSec;
+            } else if (gesture == Gesture::Turning) {
+                gesture = Gesture::None;
             }
-            holding = holding && clickRelease > 0;
-            buttonDown = false;
         }
         Widget::onButton(e);
     }
 
-    int clickRelease = 0;
-
     void step() override {
-        // Finish a synthetic click.
-        if (clickRelease > 0 && --clickRelease == 0) {
-            setPressed(false);
-            holding = false;
-        }
-        // Promote a still, held button into a press.
-        if (buttonDown && !turned && !holding && clickRelease == 0 &&
-            (system::getTime() - downTime) * 1000.0 >= kHoldMs) {
-            holding = true;
+        const double now = system::getTime();
+        if (gesture == Gesture::Clicking && now >= clickUntil) {
+            endClick();
+        } else if (gesture == Gesture::Undecided &&
+                   (now - gestureStart) * 1000.0 >= kHoldMs) {
+            gesture = Gesture::Pressing;
             setPressed(true);
         }
         Widget::step();
     }
 
     void onDragStart(const event::DragStart& e) override {
-        dragging = true;
-        accum = 0.f;
         APP->window->cursorLock();
         Widget::onDragStart(e);
     }
 
     void onDragEnd(const event::DragEnd& e) override {
-        dragging = false;
         APP->window->cursorUnlock();
         Widget::onDragEnd(e);
     }
 
     void onDragMove(const event::DragMove& e) override {
-        travel += std::fabs(e.mouseDelta.y) + std::fabs(e.mouseDelta.x);
-        if (!turned && !holding && travel > kMoveThreshold) {
-            turned = true;          // this gesture is a turn, for good
+        if (gesture == Gesture::Undecided) {
+            travel += std::fabs(e.mouseDelta.y) + std::fabs(e.mouseDelta.x);
+            if (travel > kMoveThreshold) gesture = Gesture::Turning;
         }
-        if (turned) {
+        if (gesture == Gesture::Turning) {
             // Up is clockwise, matching every other knob in Rack.
             accum += -e.mouseDelta.y / kPixelsPerDetent;
             const int whole = (int)accum;
@@ -268,7 +280,6 @@ struct EncoderWidget : Widget {
 
     void draw(const DrawArgs& args) override {
         const float r = box.size.x * 0.5f;
-        // Body
         nvgBeginPath(args.vg);
         nvgCircle(args.vg, r, r, r);
         nvgFillColor(args.vg, nvgRGB(0x1c, 0x20, 0x22));
@@ -290,12 +301,13 @@ struct EncoderWidget : Widget {
             nvgStroke(args.vg);
         }
         // Cap. It lights while the button is genuinely held, which is the only
-        // feedback that a hold is being counted towards entering the menu.
+        // feedback that a hold is being counted rather than a turn beginning.
+        const bool held = (gesture == Gesture::Pressing || gesture == Gesture::Clicking);
         nvgBeginPath(args.vg);
         nvgCircle(args.vg, r, r, r * 0.6f);
-        nvgFillColor(args.vg, holding ? nvgRGB(0x3a, 0x44, 0x33)
-                            : dragging ? nvgRGB(0x2a, 0x33, 0x36)
-                                       : nvgRGB(0x23, 0x2b, 0x2e));
+        nvgFillColor(args.vg, held ? nvgRGB(0x3a, 0x44, 0x33)
+                   : (gesture == Gesture::Turning) ? nvgRGB(0x2a, 0x33, 0x36)
+                                                   : nvgRGB(0x23, 0x2b, 0x2e));
         nvgFill(args.vg);
     }
 };
