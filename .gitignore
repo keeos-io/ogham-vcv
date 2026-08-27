@@ -1,4 +1,28 @@
+# Build output
+build/
+build_host/
+dist/
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.so
+*.dylib
+*.dll
+*.vcvplugin
 
-# Dolt database files (added by bd init)
-.dolt/
-*.db
+# Test output
+tests/parity/out/
+*.wav
+
+# Beads runtime
+.beads/*.lock
+.beads/*.pid
+.beads/dolt-monitor.pid.lock
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

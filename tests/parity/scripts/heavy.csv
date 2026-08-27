@@ -1,0 +1,28 @@
+# Ogham parity script — worst-case load
+#
+# All three FX stages at full level with their characterful variants engaged,
+# the LPG running, Out2 decoupled as a drone, and the CV output in a DC mode
+# with a hold window. This is the configuration that peaks the module near 54%
+# of its Cortex-M7, so it is the one that bounds CPU per plugin instance.
+#
+sample,formula1,formula2,A,B,rate,tone,fxfield,fxvalue,sync,clk
+0,60,84,140,90,1.0,0.72,0,1,,
+100,,,,,,,2,99
+200,,,,,,,3,1
+300,,,,,,,4,45
+400,,,,,,,5,60
+500,,,,,,,6,99
+600,,,,,,,7,1
+700,,,,,,,8,55
+800,,,,,,,9,70
+900,,,,,,,10,99
+1000,,,,,,,11,1
+1100,,,,,,,12,40
+1200,,,,,,,13,65
+1300,,,,,,,18,50
+1400,,,,,,,14,2
+1500,,,,,,,17,8
+1600,,,,,,,15,30
+1700,,,,,,,16,60
+1800,,,,,,,21,1
+2000,,,,,,,,,1,

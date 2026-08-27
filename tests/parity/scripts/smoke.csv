@@ -1,0 +1,22 @@
+# Ogham parity script — smoke test
+#
+# Walks the core through a representative range: two voices, a parameter move,
+# a rate change, the tone macro either side of centre, one FX stage, the LPG
+# with a sync pluck, and a DC-mode CV output with hold.
+#
+# Blank (or "-") means "leave as it was". Times are 48 kHz samples.
+#
+sample,formula1,formula2,A,B,rate,tone,fxfield,fxvalue,sync,clk
+0,60,84,128,64,1.0,0.5,,,,
+48000,,,200,,,,,,,
+96000,,,,,,,2,60
+120000,,,,,,,4,30
+144000,12,,,180,,,,,,
+192000,,,,,2.0,,,,,
+240000,,,,,,0.20,,,,
+288000,,,,,,0.85,,,,
+336000,,,,,,0.5,18,45
+336048,,,,,,,,,1,
+384000,,,,,0.25,,14,2
+408000,,,,,,,17,16
+432000,,,,,,,,,1,
