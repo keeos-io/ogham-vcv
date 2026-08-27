@@ -40,15 +40,36 @@ that is not in that file is a bug.
 
 ## Building
 
-Requires the VCV Rack SDK. Set `RACK_DIR`, then:
-
 ```sh
 git clone --recurse-submodules https://github.com/keeos-io/ogham-vcv.git
 cd ogham-vcv
+source tools/env.sh     # MinGW toolchain on PATH, RACK_DIR at the Rack SDK
 make
 ```
 
-The host-side spike and parity harness build without Rack; see `tests/parity/`.
+`tools/env.sh` is written for this machine; override `RACK_DIR` or `PATH`
+yourself elsewhere. The toolchain is MinGW-w64 GCC 14.2.0, `x86_64-w64-mingw32`,
+POSIX threads on the MSVCRT runtime — the same profile Rack itself is built
+with.
+
+### The parity harness
+
+The firmware's DSP sources build and run without Rack at all:
+
+```sh
+make -f tools/host.mk                # build the offline renderer with g++
+make -f tools/host.mk CXX=clang++    # or with clang
+make -f tools/host.mk check          # build both, render, compare byte for byte
+make -f tools/host.mk compile-only   # just: do the firmware sources still compile?
+
+build_host/render-g++ tests/parity/scripts/smoke.csv out.wav 10
+```
+
+The renderer drives the module's DSP from a scripted CSV and writes a 4-channel
+WAV — Out 1, Out 2, ENV, EOC — plus a hash of the audio, so a parity check is
+one line. Builds that feed a comparison carry `-ffp-contract=off`; see the
+build-determinism note in `docs/firmware-differences.md` for why that matters
+and what bit-exactness can and cannot be claimed across compilers.
 
 ## Licence
 

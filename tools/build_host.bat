@@ -2,8 +2,13 @@
 REM ---------------------------------------------------------------------------
 REM Ogham for VCV Rack - host build (MSVC)
 REM
-REM Builds the firmware's DSP sources off-target, against the shim in src/shim,
-REM plus whatever target is named on the command line. No Rack, no libDaisy.
+REM Builds the firmware's DSP sources off-target against the shim in src/shim.
+REM PORTABILITY CHECK ONLY - not a parity reference: MSVC's libm differs from
+REM mingw's by about a last place, so its renders do not hash-match the plugin's.
+REM Use tools/host.mk (GCC or clang) for anything that compares output.
+REM
+REM Compiles the firmware units plus whatever target is named on the command
+REM line. No Rack, no libDaisy.
 REM
 REM   tools\build_host.bat tests\parity\render.cpp build_host\render.exe
 REM

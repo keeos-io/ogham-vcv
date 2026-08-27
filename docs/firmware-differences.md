@@ -4,8 +4,8 @@ Every place the plugin's behaviour departs from the Ogham module's, why, and
 whether it is permanent.
 
 The firmware repository is the source of truth and this project never commits to
-it. Six of its translation units are compiled into the plugin unmodified and a
-seventh — the display transport — is compiled against dead pins; only
+it. Seven of its nine translation units are compiled into the plugin unmodified
+— the seventh, the display transport, against dead pins — and only
 `ogham_main.cpp` is re-created here. Divergence is therefore not accidental, but
 it is real, and this file is where it is accounted for.
 
@@ -73,4 +73,57 @@ later.
 | Area | Note |
 |---|---|
 | `FxFieldPtr` | `tests/parity/render.cpp` carries its own menu-field-to-struct-byte mapping, because the firmware's lives in `ogham_main.cpp` and is not compiled. It is duplicated logic and will be superseded by the transcribed version in phase 3 |
-| Two-compiler check | Phase 0 verified the verbatim units under MSVC 14.50 only; no MinGW or clang is installed on this machine. The GCC leg lands when the Rack toolchain is set up, and matters because Rack builds Windows plugins with MinGW |
+| Two-compiler check | Settled. All seven units compile unmodified under MSVC 14.50, MinGW-w64 GCC 14.2.0 and clang 19.1.7. GCC and clang render **bit-identical** audio; MSVC differs — see below |
+
+---
+
+## Build determinism
+
+Not a module-versus-plugin divergence, but it decides what the parity harness
+can claim, so it belongs here.
+
+**Floating-point contraction must be off.** GCC and clang default to
+`-ffp-contract=fast`, which lets the compiler fuse `a*b+c` into a single FMA
+with a different result from the unfused pair. MSVC does not contract by
+default. Every build that feeds a parity comparison — the harness and the Rack
+plugin alike — carries `-ffp-contract=off`. Without it, the same source built
+two ways renders audio that differs in the last bits and the hash stops meaning
+anything.
+
+**Bit-exactness holds within a toolchain family, not across libm
+implementations.** With contraction off, GCC 14.2.0 and clang 19.1.7 produce
+byte-identical WAVs — they share mingw-w64's libm. MSVC does not:
+
+| | |
+|---|---|
+| Samples differing | 1.52 % of Out 1, 0.67 % of Out 2 |
+| Maximum difference | 2.4 × 10⁻⁷, about −132 dBFS |
+| ENV and EOC | Identical, to the byte |
+
+That is a last-place difference in `expf`, `sinf` and friends, which the lo-fi
+filter and LPG coefficients are built from — not a logic divergence. It is
+inaudible and musically irrelevant, but it means the parity *reference* must be
+built with the same toolchain as the plugin. Both are MinGW GCC, so this costs
+nothing; `tools/build_host.bat` (MSVC) stays as a portability check only, and is
+not a parity reference.
+
+**Rack's default optimisation flags must not reach the firmware sources.**
+`compile.mk` in the SDK builds plugins with `-O3 -funsafe-math-optimizations
+-march=nehalem`. `-funsafe-math-optimizations` implies associative and
+reciprocal maths, no signed zeros and no trapping — it lets the compiler
+reassociate the DSP's arithmetic. Measured against the harness build on the
+smoke script:
+
+| | |
+|---|---|
+| Samples differing | 67.5 % of Out 1, 74.4 % of Out 2 |
+| Maximum difference | 1.2 × 10⁻⁶, about −118 dBFS |
+| ENV and EOC | Identical |
+| Speed | 347× vs 335× real time — about 3 % |
+
+Inaudible, and it costs the parity hash entirely: two thirds of samples differ,
+so a null test against the reference render would fail on every run for no real
+reason. The plugin therefore appends `-ffp-contract=off
+-fno-unsafe-math-optimizations` (via `EXTRA_FLAGS`, which `compile.mk` applies
+last so they win) for the firmware translation units. Three percent of a
+one-percent CPU budget is not a trade worth making.
