@@ -16,18 +16,19 @@ LFO. This plugin is that module, in Rack.
 ## How it relates to the firmware
 
 The firmware repository, [`keeos-io/ogham`](https://github.com/keeos-io/ogham),
-is the source of truth and this project never commits to it. It is included here
-as a submodule at `ogham/`, pinned to a specific commit, and six of its nine
-translation units are compiled into the plugin **unmodified**:
+is the source of truth and this project never commits to it. Seven of its nine
+translation units are compiled into the plugin **unmodified**, as byte-identical
+copies in [`ogham-src/`](ogham-src/README.md):
 
 | Compiled verbatim | Not compiled |
 |---|---|
 | `formulas.cpp` | `ogham_main.cpp` — a `main()` with globals and ISRs; transcribed as `OghamApp` |
 | `bytebeat_engine.cpp` | `ogham_controls.cpp` — ADC smoothing and analog corrections a plugin does not want |
-| `bpm_clock.cpp` | `tm1637.cpp` — bit-bangs GPIO; replaced by a segment-buffer implementation of the same class |
+| `bpm_clock.cpp` | |
 | `ogham_audio_pipeline.cpp` | `diag_pots.cpp` — a hardware diagnostic |
 | `ogham_cv_output.cpp` | |
 | `ogham_display.cpp` | |
+| `tm1637.cpp` — against dead pins | |
 
 So the voices here are not a reimplementation of the module's voices. They are
 the same code.
@@ -41,11 +42,15 @@ that is not in that file is a bug.
 ## Building
 
 ```sh
-git clone --recurse-submodules https://github.com/keeos-io/ogham-vcv.git
+git clone https://github.com/keeos-io/ogham-vcv.git
 cd ogham-vcv
 source tools/env.sh     # MinGW toolchain on PATH, RACK_DIR at the Rack SDK
-make
+make                    # or `make install` to put it in Rack's plugin folder
 ```
+
+No submodules: the firmware's sources are vendored, so the clone is one repo and
+nothing else. `python tools/upstream_check.py` verifies they are byte-identical
+to what was synced.
 
 `tools/env.sh` is written for this machine; override `RACK_DIR` or `PATH`
 yourself elsewhere. The toolchain is MinGW-w64 GCC 14.2.0, `x86_64-w64-mingw32`,
