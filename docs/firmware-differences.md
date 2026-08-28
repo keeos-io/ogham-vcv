@@ -158,3 +158,10 @@ of a gesture has to be detected.
 
 This is what made clicks disappear while turning and holding both worked, and it
 is not visible in the widget's own logic — only in Rack's event dispatcher.
+
+**The panel's components are Rack's, recoloured.** The panel artwork is the
+module's own, but the screws, jacks, knobs and the Clk/VOct toggle are VCV
+Component Library graphics, and the encoder cap is one of them recoloured gold.
+They are CC BY-NC 4.0, which a free plugin may use with credit — see
+THIRD-PARTY.md, which also records that redrawing those five is the only work
+standing between this and being sellable outside the VCV Library.

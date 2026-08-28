@@ -501,7 +501,7 @@ struct OghamWidget : ModuleWidget {
         // quite Rack's default grid positions.
         for (float x : {7.65f, 43.21f})
             for (float y : {3.0f, 125.5f})
-                addChild(createWidgetCentered<ScrewSilver>(mm2px(Vec(x, y))));
+                addChild(createWidgetCentered<ScrewBlack>(mm2px(Vec(x, y))));
 
         // Positions come from the production panel: PanelPCB-v2's Edge.Cuts
         // for the holes, and the legends in the production graphics for which
@@ -522,9 +522,9 @@ struct OghamWidget : ModuleWidget {
         addChild(fb);
 
         // Func encoder, top left.
+        // The encoder sizes itself from its SVG, so it is only positioned here.
         ogham::EncoderWidget* enc = new ogham::EncoderWidget;
-        enc->box.size = mm2px(Vec(9.0, 9.0));
-        enc->box.pos  = mm2px(Vec(7.53 - 4.5, 45.19 - 4.5));
+        enc->box.pos = mm2px(Vec(7.53, 45.19)).minus(enc->box.size.div(2));
         if (module) {
             enc->detents = &module->encDetents;
             enc->clicks  = &module->encClicks;
@@ -533,7 +533,7 @@ struct OghamWidget : ModuleWidget {
         addChild(enc);
 
         // Top row: the Clk/VOct switch, and Rate/Fine.
-        addParam(createParamCentered<ogham::ToggleSwitch>(
+        addParam(createParamCentered<ogham::ModeToggle>(
             mm2px(Vec(25.43, 45.19)), module, Ogham::MODE_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(
             mm2px(Vec(43.43, 45.19)), module, Ogham::RATE_PARAM));

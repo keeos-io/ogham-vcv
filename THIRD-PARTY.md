@@ -25,5 +25,24 @@ Linked against, not copied. This plugin is distributed free of charge under the
 VCV Rack Non-Commercial Plugin License Exception, which permits a free plugin to
 carry any licence. No non-API Rack source is copied into this project.
 
-The VCV Component Library graphics (CC BY-NC 4.0) are **not** used: every
-component on the panel is original artwork matching the hardware module.
+### Component Library graphics
+
+Some components on the panel come from Rack's Component Library, which is
+CC BY-NC 4.0, © VCV. That is permitted for a plugin distributed free of charge,
+with credit — which this is:
+
+| Used | For |
+|---|---|
+| `ScrewBlack.svg` | The four mounting screws |
+| `NKK_0.svg`, `NKK_2.svg` | The Clk / VOct toggle, in its two throws |
+| `PJ301MPort.svg`, `RoundBlackKnob.svg` | Jacks, and the A / B / Rate / Tone knobs |
+| `RoundBigBlackKnob_bg.svg` | Recoloured gold as the encoder cap, by `tools/build_encoder_knob.py` |
+
+The panel artwork itself is the module's own, and the display and the encoder's
+behaviour are drawn here.
+
+**This is the one thing that would have to change before this plugin could be
+sold outside the VCV Library.** CC BY-NC permits the free distribution and the
+recolouring, and nothing else. Redrawing these five graphics is the whole of the
+work involved, and it is worth knowing that in advance rather than discovering it
+at the point of deciding.

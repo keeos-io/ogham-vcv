@@ -153,6 +153,30 @@ struct EncoderWidget : Widget {
     std::atomic<int>* clicks  = nullptr;
     std::atomic<int>* longs   = nullptr;
 
+    // The cap: Rack's big knob background, recoloured gold by
+    // tools/build_encoder_knob.py. The background frame rather than the knob
+    // proper, because that one carries an indicator line and an endless encoder
+    // has nothing for a pointer to point at. Its ring of facets still shows the
+    // cap turning, which is the feedback that matters.
+    FramebufferWidget* fb = nullptr;
+    TransformWidget*   tw = nullptr;
+    SvgWidget*         sw = nullptr;
+    float drawnAngle = 1e9f;
+
+    EncoderWidget() {
+        fb = new FramebufferWidget;
+        tw = new TransformWidget;
+        sw = new SvgWidget;
+        sw->setSvg(Svg::load(asset::plugin(pluginInstance,
+                                           "res/components/OghamEncoder.svg")));
+        tw->addChild(sw);
+        fb->addChild(tw);
+        addChild(fb);
+        tw->box.size = sw->box.size;
+        fb->box.size = sw->box.size;
+        box.size     = sw->box.size;
+    }
+
     // Vertical travel per detent, in pixels. Tuned so a comfortable drag steps
     // about one function at a time and a fast flick crosses the bank — the same
     // relationship the hardware's acceleration curve assumes. Worth checking
@@ -233,6 +257,19 @@ struct EncoderWidget : Widget {
             longFired = true;
             if (longs) longs->fetch_add(1, std::memory_order_relaxed);
         }
+
+        // Turn the cap. Repainted only when it has actually moved, since the
+        // framebuffer is the expensive part.
+        const float angle = angleDetents * (2.f * M_PI / kDetentsPerRev);
+        if (sw && sw->svg && angle != drawnAngle) {
+            drawnAngle = angle;
+            const math::Vec centre = sw->box.getCenter();
+            tw->identity();
+            tw->translate(centre);
+            tw->rotate(angle);
+            tw->translate(centre.neg());
+            fb->setDirty();
+        }
         Widget::step();
     }
 
@@ -282,182 +319,57 @@ struct EncoderWidget : Widget {
     }
 
     void draw(const DrawArgs& args) override {
+        // The cap itself, from the SVG.
+        Widget::draw(args);
+
         const float r = box.size.x * 0.5f;
-        const float angle = angleDetents * (2.f * M_PI / kDetentsPerRev);
 
-        // Shadow, so the knob sits on the panel rather than in it.
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, r, r + 0.6f, r);
-        nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 0x66));
-        nvgFill(args.vg);
-
-        // The body: anodised gold, lit from the top left as everything else in
-        // Rack is. Two stops rather than a flat fill, because a flat gold disc
-        // reads as a sticker.
-        NVGpaint body = nvgLinearGradient(args.vg, 0, 0, 0, box.size.y,
-                                          nvgRGB(0xd8, 0xb2, 0x62),
-                                          nvgRGB(0x8a, 0x6a, 0x28));
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, r, r, r);
-        nvgFillPaint(args.vg, body);
-        nvgFill(args.vg);
-        nvgStrokeColor(args.vg, nvgRGB(0x6b, 0x51, 0x1c));
-        nvgStrokeWidth(args.vg, 0.8f);
-        nvgStroke(args.vg);
-
-        // Knurling, turning with the knob. Fine flutes rather than teeth: the
-        // module's encoder cap is a machined collar, not a chicken head.
-        nvgSave(args.vg);
-        nvgTranslate(args.vg, r, r);
-        nvgRotate(args.vg, angle);
-        for (int i = 0; i < kDetentsPerRev * 2; i++) {
-            const float a = (float)i / (kDetentsPerRev * 2) * 2.f * M_PI;
-            const float c = std::cos(a), sn = std::sin(a);
-            nvgBeginPath(args.vg);
-            nvgMoveTo(args.vg, c * r * 0.80f, sn * r * 0.80f);
-            nvgLineTo(args.vg, c * r * 0.97f, sn * r * 0.97f);
-            nvgStrokeColor(args.vg, (i % 2) ? nvgRGBA(0x5a, 0x42, 0x14, 0x99)
-                                            : nvgRGBA(0xff, 0xe6, 0xac, 0x55));
-            nvgStrokeWidth(args.vg, 0.7f);
-            nvgStroke(args.vg);
-        }
-
-        // The dished top, and the indicator flat on its edge.
-        NVGpaint dish = nvgRadialGradient(args.vg, -r * 0.25f, -r * 0.3f,
-                                          r * 0.1f, r * 0.8f,
-                                          nvgRGB(0xe8, 0xc6, 0x80),
-                                          nvgRGB(0x9a, 0x77, 0x30));
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, 0, 0, r * 0.72f);
-        nvgFillPaint(args.vg, dish);
-        nvgFill(args.vg);
-
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, 0, -r * 0.24f);
-        nvgLineTo(args.vg, 0, -r * 0.66f);
-        nvgStrokeColor(args.vg, nvgRGBA(0x3a, 0x2a, 0x0c, 0xcc));
-        nvgStrokeWidth(args.vg, 1.1f);
-        nvgLineCap(args.vg, NVG_ROUND);
-        nvgStroke(args.vg);
-        nvgRestore(args.vg);
-
-        // A hold darkens the cap, and its progress runs round the rim — the only
+        // A hold darkens the cap and runs its progress round the rim — the only
         // sign that the menu is about to open rather than a turn beginning.
         if (armed && !turning && !longFired) {
             nvgBeginPath(args.vg);
-            nvgCircle(args.vg, r, r, r * 0.72f);
-            nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 0x33));
+            nvgCircle(args.vg, r, r, r * 0.86f);
+            nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 0x3a));
             nvgFill(args.vg);
 
             const float t = (float)((system::getTime() - downTime) / kLongPressSec);
             if (t > 0.05f) {
                 nvgBeginPath(args.vg);
-                nvgArc(args.vg, r, r, r * 0.88f, -M_PI * 0.5f,
+                nvgArc(args.vg, r, r, r * 0.72f, -M_PI * 0.5f,
                        -M_PI * 0.5f + std::min(t, 1.f) * 2.f * M_PI, NVG_CW);
                 nvgStrokeColor(args.vg, nvgRGB(0xff, 0xf0, 0xc8));
-                nvgStrokeWidth(args.vg, 1.4f);
+                nvgStrokeWidth(args.vg, 2.0f);
                 nvgStroke(args.vg);
             }
+        } else if (longFired) {
+            // Held long enough: a brief confirmation that it landed.
+            nvgBeginPath(args.vg);
+            nvgCircle(args.vg, r, r, r * 0.72f);
+            nvgStrokeColor(args.vg, nvgRGBA(0xff, 0xf0, 0xc8, 0x88));
+            nvgStrokeWidth(args.vg, 2.0f);
+            nvgStroke(args.vg);
         }
     }
 };
 
 // ---------------------------------------------------------------------------
-// A metal toggle with a hex nut, for the Clk / VOct switch.
+// The Clk / VOct toggle.
 //
-// The module's is a Dailywell SPDT — a threaded bushing through the panel with a
-// hex nut and a bat lever, which is a different object entirely from the plastic
-// slide switch Rack's component library offers. Drawn rather than photographed
-// so it sits at any zoom.
+// The module's is a metal bat switch through a threaded bushing with a hex nut,
+// which is what Rack's NKK frames draw. Two of its three positions: the lever
+// points at the legend it selects, and the panel prints Clk above and VOct
+// below, so param 0 (Clock) is the UP frame and param 1 (V/oct) is the DOWN one.
 //
-// Switch gives it the click-to-toggle behaviour and the param binding; only the
-// drawing is ours.
+// NKK_0 is the down throw and NKK_2 the up one, which is the opposite way round
+// from what the numbering suggests — checked by looking at them rather than
+// assuming.
 // ---------------------------------------------------------------------------
 
-struct ToggleSwitch : app::Switch {
-    ToggleSwitch() {
-        box.size = mm2px(math::Vec(7.0, 9.5));
-    }
-
-    void draw(const DrawArgs& args) override {
-        const float cx = box.size.x * 0.5f;
-        const float cy = box.size.y * 0.5f;         // the bushing, mid-widget
-        const float nutR = box.size.x * 0.42f;      // across the flats
-        const float reach = box.size.y * 0.40f;     // how far the bat throws
-
-        // The lever points AT the legend it selects: the panel prints Clk above
-        // the switch and VOct below it, so V/oct is the down position. Param 0
-        // is Clock, param 1 is V/oct.
-        float v = 0.f;
-        if (getParamQuantity())
-            v = getParamQuantity()->getValue() > 0.5f ? 1.f : 0.f;
-        const float dir = (v > 0.5f) ? 1.f : -1.f;  // +1 down for V/oct
-        const float tipY = cy + dir * reach;
-
-        // Shadow under the nut.
-        nvgBeginPath(args.vg);
-        nvgEllipse(args.vg, cx, cy + 0.8f, nutR * 1.05f, nutR * 0.62f);
-        nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 0x55));
-        nvgFill(args.vg);
-
-        // The hex nut, flats to the sides as it is fitted, foreshortened as if
-        // seen slightly from above.
-        nvgBeginPath(args.vg);
-        for (int i = 0; i < 6; i++) {
-            const float a = (float)i / 6.f * 2.f * M_PI + M_PI / 6.f;
-            const float x = cx + std::cos(a) * nutR;
-            const float y = cy + std::sin(a) * nutR * 0.62f;
-            if (i == 0) nvgMoveTo(args.vg, x, y);
-            else        nvgLineTo(args.vg, x, y);
-        }
-        nvgClosePath(args.vg);
-        NVGpaint nut = nvgLinearGradient(args.vg, cx, cy - nutR * 0.6f,
-                                         cx, cy + nutR * 0.6f,
-                                         nvgRGB(0xd6, 0xda, 0xdc),
-                                         nvgRGB(0x77, 0x7e, 0x82));
-        nvgFillPaint(args.vg, nut);
-        nvgFill(args.vg);
-        nvgStrokeColor(args.vg, nvgRGB(0x4a, 0x51, 0x55));
-        nvgStrokeWidth(args.vg, 0.5f);
-        nvgStroke(args.vg);
-
-        // The threaded collar inside the nut, which the bat emerges from.
-        nvgBeginPath(args.vg);
-        nvgEllipse(args.vg, cx, cy - 0.2f, nutR * 0.46f, nutR * 0.30f);
-        nvgFillColor(args.vg, nvgRGB(0x8e, 0x95, 0x99));
-        nvgFill(args.vg);
-
-        // The bat: tapered, with a rounded tip, drawn over the nut so it reads
-        // as standing proud of the panel in either throw.
-        const float baseW = box.size.x * 0.13f;
-        const float tipW  = box.size.x * 0.095f;
-        NVGpaint bat = nvgLinearGradient(args.vg, cx - baseW, 0, cx + baseW, 0,
-                                         nvgRGB(0xf4, 0xf6, 0xf7),
-                                         nvgRGB(0x7c, 0x84, 0x88));
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, cx - baseW, cy);
-        nvgLineTo(args.vg, cx + baseW, cy);
-        nvgLineTo(args.vg, cx + tipW,  tipY);
-        nvgLineTo(args.vg, cx - tipW,  tipY);
-        nvgClosePath(args.vg);
-        nvgFillPaint(args.vg, bat);
-        nvgFill(args.vg);
-
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, cx, tipY, tipW * 1.35f);
-        nvgFillPaint(args.vg, bat);
-        nvgFill(args.vg);
-        nvgStrokeColor(args.vg, nvgRGBA(0x2a, 0x2f, 0x31, 0x88));
-        nvgStrokeWidth(args.vg, 0.4f);
-        nvgStroke(args.vg);
-
-        // A highlight down the lit edge, so it reads as metal rather than card.
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, cx - baseW * 0.45f, cy);
-        nvgLineTo(args.vg, cx - tipW * 0.45f, tipY);
-        nvgStrokeColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x77));
-        nvgStrokeWidth(args.vg, 0.4f);
-        nvgStroke(args.vg);
+struct ModeToggle : app::SvgSwitch {
+    ModeToggle() {
+        shadow->opacity = 0.0;
+        addFrame(Svg::load(asset::system("res/ComponentLibrary/NKK_2.svg")));  // up: Clk
+        addFrame(Svg::load(asset::system("res/ComponentLibrary/NKK_0.svg")));  // down: V/oct
     }
 };
 
