@@ -90,7 +90,12 @@ This is the one with lasting value. Half an hour on a Mac, mostly waiting for a
 download, and afterwards *this* machine builds all four targets from one command,
 permanently and offline.
 
-On the Mac:
+[`mac-sdk-guide.md`](mac-sdk-guide.md) is the step-by-step, with the two
+checkpoints that matter — the second of which catches the wrong Xcode before an
+hour is spent on it. `tools/toolchain/sdk/extract_sdk.sh` does the same work in
+one command.
+
+The short version, on the Mac:
 
 ```bash
 # Xcode 14.0.1 specifically, from developer.apple.com — a free Apple ID is enough.
