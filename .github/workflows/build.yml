@@ -47,6 +47,14 @@ jobs:
           sudo apt-get update && sudo apt-get install -y --no-install-recommends clang
           make -f tools/host.mk check
 
+      # The same invocation tools/cross_build.py analyze runs locally. Exhaustive
+      # rather than cppcheck's normal level, which otherwise reports the branches
+      # it skipped as an informational finding and fails on it.
+      - name: Static analysis
+        run: |
+          sudo apt-get install -y --no-install-recommends cppcheck
+          cppcheck src/ --std=c++11 -j$(nproc) --check-level=exhaustive             --error-exitcode=1 --enable=warning,performance,portability             --suppress=missingInclude --inline-suppr
+
   plugin:
     name: ${{ matrix.name }}
     needs: tests

@@ -164,7 +164,17 @@ def main():
     if "shell" in todo:
         return run_in_image(image, "exec bash -i")
     if "analyze" in todo:
-        return run_in_image(image, "make plugin-analyze")
+        # Not the toolchain's `plugin-analyze`: that runs at cppcheck's normal
+        # check level, which then emits an informational note about the branches
+        # it did not follow — and --error-exitcode makes that note a failure. If
+        # the analysis is going to be run at all, run it exhaustively and turn on
+        # the checks worth having.
+        return run_in_image(image, (
+            "export PATH=/home/build/rack-plugin-toolchain/local/cppcheck/bin:"
+            "$PATH && cd /home/build/plugin-src && cppcheck src/ --std=c++11 "
+            "-j%d --check-level=exhaustive --error-exitcode=1 "
+            "--enable=warning,performance,portability "
+            "--suppress=missingInclude --inline-suppr" % args.jobs))
 
     if "all" in todo:
         todo = ["win", "lin"] + (MAC_TARGETS if has_mac else [])
