@@ -50,8 +50,9 @@ SHIM_SRC := src/shim/ogham_clock.cpp
 RENDER := $(BUILD)/render-$(notdir $(CXX))$(EXE_SUFFIX)
 CONV   := $(BUILD)/converter_test$(EXE_SUFFIX)
 APPT   := $(BUILD)/app_test$(EXE_SUFFIX)
+MULTI  := $(BUILD)/multi_test$(EXE_SUFFIX)
 
-.PHONY: all check compile-only converter app clean
+.PHONY: all check compile-only converter app multi tests clean
 
 all: $(RENDER)
 
@@ -72,6 +73,18 @@ app: $(APPT)
 $(APPT): tests/parity/app_test.cpp src/OghamApp.cpp src/OghamApp.hpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -Isrc -o $@ 		tests/parity/app_test.cpp src/OghamApp.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
+
+# Eight instances at once: does each render exactly what it renders alone? The
+# firmware keeps its state in globals, so this is where a missed one shows up.
+multi: $(MULTI)
+	@./$(MULTI)
+
+$(MULTI): tests/parity/multi_test.cpp src/OghamApp.cpp src/OghamApp.hpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -Isrc -o $@ 		tests/parity/multi_test.cpp src/OghamApp.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
+
+# Everything that can run without Rack.
+tests: converter app multi
 
 $(RENDER): tests/parity/render.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 	@mkdir -p $(BUILD)

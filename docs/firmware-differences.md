@@ -165,3 +165,22 @@ Component Library graphics, and the encoder cap is one of them recoloured gold.
 They are CC BY-NC 4.0, which a free plugin may use with credit — see
 THIRD-PARTY.md, which also records that redrawing those five is the only work
 standing between this and being sellable outside the VCV Library.
+
+**A plugin has to zero what a module gets for free.** `BpmClock` declares four
+arrays with no default initialiser that `Init()` never writes — `fftBuffer_`,
+`fluxLin_`, `corr_` and `bpmHist_`. On the module the object is a file-scope
+static, so the loader zeroes it before `main()` and the omission is invisible.
+In the plugin it is a member of a heap-allocated `Module`, where `new Ogham`
+default-initialises it and those arrays hold whatever was there. `bpmHist_` is
+the estimator's agreement history, so a fresh module could lock to a tempo
+derived from nothing, differently on each instantiation.
+
+`OghamApp` is therefore value-initialised — `app{}` — which zeroes the whole
+object before `Init()` runs. It is one brace, and it is the difference between
+deterministic start-up and an intermittent bug nobody could reproduce.
+
+Found by the multi-instance test, and worth saying how: it presented as eight
+instances sharing state. They were not. Each was starting from different
+rubbish, and the harness's own solo runs — stack-allocated, one after another at
+the same address — were inheriting each other's leftovers. The test now
+value-initialises both paths, so it compares like with like.

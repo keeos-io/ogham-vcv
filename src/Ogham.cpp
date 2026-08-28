@@ -125,7 +125,19 @@ struct Ogham : Module {
     };
     enum LightId { LIGHTS_LEN };
 
-    ogham::OghamApp      app;
+    // Value-initialised, and that brace is load-bearing.
+    //
+    // BpmClock has four arrays with no default initialiser that Init() never
+    // touches — fftBuffer_, fluxLin_, corr_ and bpmHist_. On the module that
+    // costs nothing: the object is a file-scope static, so the loader zeroes it.
+    // Here it is a member of a heap-allocated Module, so `new Ogham` would
+    // default-initialise it and leave those arrays holding whatever was in that
+    // memory. bpmHist_ is the estimator's agreement history, so a fresh module
+    // could lock to a tempo derived from nothing at all, differently each time.
+    //
+    // Found by the multi-instance test, which caught it as instances appearing
+    // to share state — they were not; each was starting from different rubbish.
+    ogham::OghamApp      app{};
     ogham::RateConverter conv;
     dsp::SchmittTrigger  syncTrigger;
     dsp::SchmittTrigger  clockTrigger;
