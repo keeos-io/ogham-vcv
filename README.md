@@ -39,6 +39,59 @@ boundary, persistence — is recorded in
 [`docs/firmware-differences.md`](docs/firmware-differences.md). A divergence
 that is not in that file is a bug.
 
+## Using it
+
+The panel is the module's, at hardware size and hardware layout, so anything
+written about the module applies here. The
+[module manual](https://github.com/keeos-io/ogham) is the full account; this is
+what a Rack user needs.
+
+### The panel
+
+| Control | Does |
+|---|---|
+| **Func** encoder | Selects the function for the current voice; press and hold for the menu |
+| **A**, **B** | The two live parameters, shared by both voices |
+| **Rate** | Time rate, 1× at noon, 1/64× to 64× — slow enough for the CV output to act as an LFO |
+| **Tone** | Bipolar lo-fi macro. Noon is clean: anticlockwise filters and folds, clockwise crushes and resonates |
+| **Clk / VOct** | What the shared jack means — an external clock, or pitch |
+| **CV A**, **CV B** | Summed into A and B |
+| **Sync** | Resets time to zero, and plucks the low-pass gate when it is on |
+| **Out 1**, **Out 2** | The two voices |
+| **ENV** | Envelope follower of Out 1, or a bytebeat LFO — see menu field 14 |
+| **EOC** | Gate, derived from the rhythm of voice 1 |
+
+### Driving the encoder with a mouse
+
+The module has a shaft you turn and press. A mouse has neither, so the gestures
+map like this:
+
+| Gesture | Does |
+|---|---|
+| Drag | Turns it — changes the function, or the menu field or value |
+| Click | Switches the selected voice, or enters and commits a menu edit |
+| Hold ~0.6 s | Opens the menu, and leaves it from anywhere |
+| Scroll | Turns it, **only** if Rack's *Scroll wheel knob adjustment* preference is on |
+
+Scroll is off by default because that is Rack's own default, and because scroll
+otherwise belongs to the view — on a trackpad, a two-finger swipe is a scroll,
+and it should move around the patch rather than change the function.
+
+Right-click for the whole function bank by name and category, the FX menu,
+and **Drag turns the encoder**, which is stored per installation rather than in
+the patch.
+
+### The display
+
+`X-NN` is voice and function. In the menu, `T x. NN` is effect, field and value.
+The far-right dot means the tone macro is at its clean centre.
+
+### What is not the same as the hardware
+
+Patches do not transfer: the module keeps its settings in its own flash format
+and nothing reads it out. Everything else that differs is listed in
+[`docs/firmware-differences.md`](docs/firmware-differences.md).
+
 ## Building
 
 ```sh
