@@ -192,12 +192,19 @@ struct Ogham : Module {
 
         ogham::shim::SetClockSource(&RackEngineMicros);
         app.Init();
-        onSampleRateChange();
+        adoptHostRate();
     }
 
-    void onSampleRateChange() override {
+    // Not the virtual override, and not for tidiness: a virtual call made from a
+    // constructor does not dispatch virtually — the object is still an Ogham at
+    // that point, whatever it might become — so calling the override here would
+    // silently do something other than it appears to. Caught by cppcheck
+    // (virtualCallInConstructor) on the first CI run.
+    void adoptHostRate() {
         conv.setHostRate(APP->engine->getSampleRate());
     }
+
+    void onSampleRateChange() override { adoptHostRate(); }
 
     void onReset(const ResetEvent& e) override {
         Module::onReset(e);
@@ -207,7 +214,7 @@ struct Ogham : Module {
     }
 
     void process(const ProcessArgs& args) override {
-        if (args.sampleRate != conv.hostRate()) onSampleRateChange();
+        if (args.sampleRate != conv.hostRate()) adoptHostRate();
 
         // Function selection is a param rather than app state, so it can be
         // automated and MIDI-mapped — the one deliberate departure from
