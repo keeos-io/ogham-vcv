@@ -66,19 +66,32 @@ must survive. It now lives in `daisysp-src/`, alongside `ogham-src/`.
 
 ### What it produced
 
-Both targets, verified rather than assumed — a file with the right name proves
+All four, verified rather than assumed — a file with the right name proves
 nothing:
 
-| | |
+| Package | Binary |
 |---|---|
 | `Keeos-2.0.0-win-x64.vcvplugin` | PE32+ DLL, x86-64, stripped |
 | `Keeos-2.0.0-lin-x64.vcvplugin` | ELF 64-bit shared object, x86-64, stripped |
-| Linux glibc floor | **GLIBC_2.14**, which is 2011 |
-| Linux dependencies | `libRack.so`, `libm`, `libc` — no libstdc++ |
+| `Keeos-2.0.0-mac-x64.vcvplugin` | Mach-O 64-bit, X86_64, ad-hoc signed |
+| `Keeos-2.0.0-mac-arm64.vcvplugin` | Mach-O 64-bit, ARM64, ad-hoc signed |
 
-That glibc figure is the whole point of the Ubuntu 16.04 sysroot: the binary runs
-on distributions far older than the machine that built it, which a native
-`ubuntu-latest` build would not.
+And the properties that decide whether they will actually load, rather than
+merely having compiled:
+
+| | |
+|---|---|
+| Linux glibc floor | **GLIBC_2.14** — 2011 |
+| Linux dependencies | `libRack.so`, `libm`, `libc` — no libstdc++ |
+| macOS minimum | 10.9 on x64, 11.0 on arm64 |
+| macOS links | `/tmp/Rack2/libRack.dylib`, `libc++`, `libSystem` |
+| macOS signature | ad-hoc, via `rcodesign` |
+
+The glibc figure is the point of the Ubuntu 16.04 sysroot: the binary runs on
+distributions far older than the machine that built it, which a native
+`ubuntu-latest` build would not. `/tmp/Rack2/libRack.dylib` is not a mistake —
+it is the install name Rack itself resolves at load time, written by
+`install_name_tool` in Rack's own `dist` rule.
 
 ## macOS
 
