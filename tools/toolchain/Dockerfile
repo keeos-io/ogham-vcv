@@ -66,6 +66,13 @@ RUN JOBS=${JOBS} make toolchain-lin
 RUN JOBS=${JOBS} make cppcheck
 RUN make rack-sdk-win-x64 rack-sdk-lin-x64
 
+# osxcross fetches binutils from gnu.org too, and its MIRROR is a plain
+# assignment no environment variable can override. This edits the toolchain-mac
+# recipe to rewrite it just after the clone. Placed here, below everything the
+# Windows and Linux builds need, so that a macOS failure never invalidates them.
+COPY --chown=build:build patch_osxcross.sh /home/build/rack-plugin-toolchain/
+RUN ./patch_osxcross.sh
+
 # macOS, if and only if an SDK has been supplied. Last, deliberately: everything
 # above is reachable without a Mac, so adding an SDK later reuses those layers
 # instead of rebuilding two toolchains from source.
