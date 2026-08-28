@@ -162,6 +162,13 @@ struct EncoderWidget : Widget {
     TransformWidget*   tw = nullptr;
     SvgWidget*         sw = nullptr;
     float drawnAngle = 1e9f;
+    float capScale = 1.f;
+
+    // The cap is drawn from Rack's big knob, which is 45 px across, and the
+    // module's encoder is the same size as its pots. RoundBlackKnob is 28.35 px,
+    // so the cap is scaled to that rather than to a number chosen by eye — if
+    // either graphic changes, this still matches.
+    static constexpr float kPotDiameterPx = 28.34759f;
 
     EncoderWidget() {
         fb = new FramebufferWidget;
@@ -172,9 +179,11 @@ struct EncoderWidget : Widget {
         tw->addChild(sw);
         fb->addChild(tw);
         addChild(fb);
-        tw->box.size = sw->box.size;
-        fb->box.size = sw->box.size;
-        box.size     = sw->box.size;
+
+        capScale = (sw->box.size.x > 0.f) ? kPotDiameterPx / sw->box.size.x : 1.f;
+        tw->box.size = sw->box.size.mult(capScale);
+        fb->box.size = tw->box.size;
+        box.size     = tw->box.size;
     }
 
     // Vertical travel per detent, in pixels. Tuned so a comfortable drag steps
@@ -260,13 +269,19 @@ struct EncoderWidget : Widget {
 
         // Turn the cap. Repainted only when it has actually moved, since the
         // framebuffer is the expensive part.
+        //
+        // The scale sits inside the transform rather than around it, so the
+        // framebuffer renders at the size it is drawn and stays crisp. Read the
+        // calls in reverse: the centre goes to the origin, is scaled, is
+        // rotated, and comes back to where the scaled centre belongs.
         const float angle = angleDetents * (2.f * M_PI / kDetentsPerRev);
         if (sw && sw->svg && angle != drawnAngle) {
             drawnAngle = angle;
             const math::Vec centre = sw->box.getCenter();
             tw->identity();
-            tw->translate(centre);
+            tw->translate(centre.mult(capScale));
             tw->rotate(angle);
+            tw->scale(capScale);
             tw->translate(centre.neg());
             fb->setDirty();
         }
@@ -366,10 +381,24 @@ struct EncoderWidget : Widget {
 // ---------------------------------------------------------------------------
 
 struct ModeToggle : app::SvgSwitch {
+    // The library part is drawn for a bigger panel than this one. A fifth off
+    // puts it in proportion with the pots either side of it.
+    static constexpr float kScale = 0.8f;
+
     ModeToggle() {
         shadow->opacity = 0.0;
         addFrame(Svg::load(asset::system("res/ComponentLibrary/NKK_2.svg")));  // up: Clk
         addFrame(Svg::load(asset::system("res/ComponentLibrary/NKK_0.svg")));  // down: V/oct
+        // addFrame sizes the widget from the first frame; shrink it afterwards
+        // so the hit box matches what is drawn.
+        box.size = box.size.mult(kScale);
+    }
+
+    void draw(const DrawArgs& args) override {
+        nvgSave(args.vg);
+        nvgScale(args.vg, kScale, kScale);
+        app::SvgSwitch::draw(args);
+        nvgRestore(args.vg);
     }
 };
 
