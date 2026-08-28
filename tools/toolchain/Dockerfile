@@ -30,7 +30,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 ARG JOBS
 ARG TOOLCHAIN_COMMIT=4fd1318701624051cee54b385343f23d59b4845c
-ARG MACOS_SDK_VERSION=12.3
 
 # Just enough to bootstrap; the real list comes from the toolchain's own rule.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -57,6 +56,15 @@ RUN sudo apt-get update && make dep-ubuntu && sudo rm -rf /var/lib/apt/lists/*
 # Separate layers so a failure says which toolchain failed, and a retry keeps
 # whatever already succeeded.
 RUN JOBS=${JOBS} make toolchain-win
+# The Linux toolchain fetches texinfo straight from ftp.gnu.org, which refuses
+# connections from some networks — it does from this one, and ftpmirror.gnu.org
+# with it, while mirrors.kernel.org serves the identical file. Repoint that one
+# URL. The rule checks a SHA-256 on the very next line, so a mirror serving
+# anything else fails the build instead of passing quietly.
+#
+# This is the one place the pinned upstream Makefile is modified, and only
+# inside the image.
+RUN sed -i 's|https://ftp.gnu.org/gnu/|https://mirrors.kernel.org/gnu/|' Makefile
 RUN JOBS=${JOBS} make toolchain-lin
 RUN JOBS=${JOBS} make cppcheck
 RUN make rack-sdk-win-x64 rack-sdk-lin-x64
