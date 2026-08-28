@@ -12,9 +12,10 @@
 # from Apple. That SDK can only be extracted on a Mac, from a specific Xcode, and
 # Apple's licence forbids redistributing it, so no public image can contain one.
 #
-# This image is the same toolchain with the mac target left out: it builds
-# win-x64 and lin-x64, which is everything reachable without a Mac. See
-# docs/cross-compiling.md for how the two macOS builds are covered instead.
+# This image is the same toolchain with the mac target made OPTIONAL: it builds
+# win-x64 and lin-x64 unconditionally, which is everything reachable without a
+# Mac, and adds mac-x64 and mac-arm64 if an SDK has been placed in
+# tools/toolchain/sdk/. See docs/cross-compiling.md.
 #
 # It clones the upstream toolchain at a pinned commit and runs VCV's own
 # dep-ubuntu rather than copying their dependency list here — one source of
@@ -29,6 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 ARG JOBS
 ARG TOOLCHAIN_COMMIT=4fd1318701624051cee54b385343f23d59b4845c
+ARG MACOS_SDK_VERSION=12.3
 
 # Just enough to bootstrap; the real list comes from the toolchain's own rule.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -58,3 +60,12 @@ RUN JOBS=${JOBS} make toolchain-win
 RUN JOBS=${JOBS} make toolchain-lin
 RUN JOBS=${JOBS} make cppcheck
 RUN make rack-sdk-win-x64 rack-sdk-lin-x64
+
+# macOS, if and only if an SDK has been supplied. Last, deliberately: everything
+# above is reachable without a Mac, so adding an SDK later reuses those layers
+# instead of rebuilding two toolchains from source.
+#
+# If an SDK IS present, the image is no longer redistributable — the tarball
+# stays in this COPY layer even though the build deletes it afterwards.
+COPY --chown=build:build sdk/ /home/build/rack-plugin-toolchain/sdk/
+RUN if ls sdk/MacOSX*.sdk.tar.* >/dev/null 2>&1; then         echo "macOS SDK found; building osxcross."         && cp sdk/MacOSX*.sdk.tar.* .         && JOBS=${JOBS} make toolchain-mac         && make rack-sdk-mac-x64 rack-sdk-mac-arm64         && rm -f MacOSX*.sdk.tar.*;     else         echo "No macOS SDK in tools/toolchain/sdk/; building win-x64 and lin-x64 only.";     fi     && rm -rf sdk

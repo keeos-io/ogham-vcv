@@ -27,3 +27,6 @@ tests/parity/out/
 Thumbs.db
 desktop.ini
 dist-cross/
+
+# Apple SDK: licence-restricted, never committed. See tools/toolchain/sdk/README.md.
+tools/toolchain/sdk/MacOSX*.sdk.tar.*

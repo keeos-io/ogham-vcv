@@ -64,24 +64,82 @@ failed on the missing headers — a confusing way to learn that `dep/` is Rack's
 scratch space for dependencies a build can re-fetch, not a place for source that
 must survive. It now lives in `daisysp-src/`, alongside `ogham-src/`.
 
-## macOS: on a Mac, without owning one
+## macOS
 
-Three routes, and the first is the one that matters most.
+Three routes. Which one matters depends on whether a Mac is to hand.
+
+### If a Mac is available: extract the SDK once
+
+This is the one with lasting value. Half an hour on a Mac, mostly waiting for a
+download, and afterwards *this* machine builds all four targets from one command,
+permanently and offline.
+
+On the Mac:
+
+```bash
+# Xcode 14.0.1 specifically, from developer.apple.com — a free Apple ID is enough.
+# It is only unpacked, never run, so it need not support the host macOS version.
+xip --expand Xcode_14.0.1.xip
+
+git clone https://github.com/tpoechtrager/osxcross.git
+cd osxcross/tools
+XCODEDIR=/path/to/Xcode.app ./gen_sdk_package.sh    # writes MacOSX12.3.sdk.tar.xz
+```
+
+Bring `MacOSX12.3.sdk.tar.xz` back, drop it in `tools/toolchain/sdk/`, and
+rebuild the image:
+
+```bash
+python tools/cross_build.py image   # Windows and Linux layers are cached
+python tools/cross_build.py all     # all four
+```
+
+The version is not negotiable: the toolchain pins `DARWIN_VERSION = 21.4`, which
+is macOS 12.3, and the compiler triples it builds are named after it.
+
+The image is then tagged `:all` rather than `:win-lin`, and **it must not be
+pushed to a public registry** — the SDK stays in its `COPY` layer even though the
+build deletes it afterwards.
+
+### While on the Mac, run it there
+
+Worth doing regardless, because it is the part CI cannot do: no runner can say
+whether the panel looks right, the encoder gestures feel right, or the display
+reads correctly on a Retina screen.
+
+```bash
+curl -fLO https://vcvrack.com/downloads/Rack-SDK-2.6.6-mac-arm64.zip   # or mac-x64
+unzip Rack-SDK-2.6.6-mac-arm64.zip
+export RACK_DIR=$PWD/Rack-SDK
+brew install zstd                    # `make dist` needs it
+make -j$(sysctl -n hw.ncpu) install  # into ~/Library/Application Support/Rack2/
+```
+
+And one measurement worth taking while there, which settles an open question in
+`firmware-differences.md` — whether the DSP is bit-identical across platforms or
+merely close:
+
+```bash
+make -f tools/host.mk tests
+build_host/render-g++ tests/parity/scripts/smoke.csv /tmp/mac.wav 10
+```
+
+The renderer prints a hash of the audio. If it matches the Windows hash, the port
+is bit-exact across two compilers, two libms and two architectures, which is a
+stronger claim than has been made so far. If it does not, the size of the
+difference is the interesting number, and worth recording either way.
+
+### If no Mac is available
 
 **The VCV Library builds it for you.** Submission is a source repository and a
 manifest; VCV's build farm compiles all four platforms itself. For a free plugin
 distributed through the Library, no Mac binary ever has to be produced here.
 
 **GitHub Actions runs real Macs.** `macos-13` is x64 and `macos-14` is arm64,
-both free for public repositories, both with Xcode already installed. No SDK
-extraction, no `osxcross`, no Apple account — the plugin simply compiles natively
-with the matching Rack SDK. This is what `.github/workflows/build.yml` does, and
-it is how the Mac build gets *verified* here rather than assumed.
-
-**Borrow a Mac once.** Extract `MacOSX12.3.sdk.tar.xz` per VCV's README, drop it
-into a clone of their toolchain, and `make docker-build` gives all four targets
-locally and forever. Worth doing if a Mac is ever within reach for an afternoon;
-not worth buying one for.
+both free for public repositories, both with Xcode already installed — so the
+plugin compiles natively with no SDK extraction and no Apple account. That is
+what `.github/workflows/build.yml` does, and it is how the Mac build gets
+verified on every push rather than assumed.
 
 ## Versions
 
