@@ -499,21 +499,28 @@ struct OghamWidget : ModuleWidget {
         addChild(createWidget<ScrewSilver>(
             Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-        // Positions match res/Ogham.svg, in millimetres.
+        // Positions come from the production panel: PanelPCB-v2's Edge.Cuts
+        // for the holes, and the legends in the production graphics for which
+        // hole is which. res/Ogham.svg is generated from the same numbers by
+        // tools/build_panel.py, and tools/panel_check.py asserts the two agree.
+        //
+        // Panel millimetres plus 0.15, the padding that takes the real 50.5 mm
+        // panel out to Rack's 10 HP.
 
         // The display, in a framebuffer so it only repaints when the segments
         // change — 30 Hz of content against Rack's 60 Hz of frames.
         FramebufferWidget* fb = new FramebufferWidget;
         ogham::SevenSegmentDisplay* seg = new ogham::SevenSegmentDisplay;
-        seg->box.pos  = mm2px(Vec(3.5, 5.5));
-        seg->box.size = mm2px(Vec(29.0, 11.5));
+        seg->box.pos  = mm2px(Vec(12.55, 12.62));
+        seg->box.size = mm2px(Vec(29.50, 12.50));
         if (module) seg->segments = &module->displaySegments;
         fb->addChild(seg);
         addChild(fb);
 
+        // Func encoder, top left.
         ogham::EncoderWidget* enc = new ogham::EncoderWidget;
-        enc->box.size = mm2px(Vec(11.0, 11.0));
-        enc->box.pos  = mm2px(Vec(37.0, 5.8));
+        enc->box.size = mm2px(Vec(9.0, 9.0));
+        enc->box.pos  = mm2px(Vec(7.53 - 4.5, 45.19 - 4.5));
         if (module) {
             enc->detents = &module->encDetents;
             enc->clicks  = &module->encClicks;
@@ -521,45 +528,47 @@ struct OghamWidget : ModuleWidget {
         }
         addChild(enc);
 
-        // The two function slots stay as params so they can be automated and
-        // MIDI-mapped; the encoder drives whichever the selected voice points
-        // at. Small trimpots here because the panel is a placeholder — phase 4
-        // decides how they are presented for real.
-        addParam(createParamCentered<Trimpot>(
-            mm2px(Vec(13.0, 26.0)), module, Ogham::FUNC1_PARAM));
-        addParam(createParamCentered<Trimpot>(
-            mm2px(Vec(24.0, 26.0)), module, Ogham::FUNC2_PARAM));
-
-        addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(13.0, 43.0)), module, Ogham::A_PARAM));
-        addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(37.8, 43.0)), module, Ogham::B_PARAM));
-
-        addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(13.0, 61.0)), module, Ogham::RATE_PARAM));
-        addParam(createParamCentered<RoundBlackKnob>(
-            mm2px(Vec(37.8, 61.0)), module, Ogham::TONE_PARAM));
-
+        // Top row: the Clk/VOct switch, and Rate/Fine.
         addParam(createParamCentered<CKSS>(
-            mm2px(Vec(25.4, 75.0)), module, Ogham::MODE_PARAM));
+            mm2px(Vec(25.43, 45.19)), module, Ogham::MODE_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(
+            mm2px(Vec(43.43, 45.19)), module, Ogham::RATE_PARAM));
 
-        addInput(createInputCentered<PJ301MPort>(
-            mm2px(Vec(8.0, 92.0)), module, Ogham::CV_A_INPUT));
-        addInput(createInputCentered<PJ301MPort>(
-            mm2px(Vec(19.6, 92.0)), module, Ogham::CV_B_INPUT));
-        addInput(createInputCentered<PJ301MPort>(
-            mm2px(Vec(31.2, 92.0)), module, Ogham::SYNC_INPUT));
-        addInput(createInputCentered<PJ301MPort>(
-            mm2px(Vec(42.8, 92.0)), module, Ogham::CLK_VOCT_INPUT));
+        // Bottom row: A, B, Tone.
+        addParam(createParamCentered<RoundBlackKnob>(
+            mm2px(Vec(7.53, 65.69)), module, Ogham::A_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(
+            mm2px(Vec(25.43, 65.69)), module, Ogham::B_PARAM));
+        addParam(createParamCentered<RoundBlackKnob>(
+            mm2px(Vec(43.43, 65.69)), module, Ogham::TONE_PARAM));
 
+        // Inputs. The panel's order is CV A, CV B, Clk/VOct, Sync — the
+        // production legends, which put Clk third and Sync fourth.
+        addInput(createInputCentered<PJ301MPort>(
+            mm2px(Vec(5.93, 97.27)), module, Ogham::CV_A_INPUT));
+        addInput(createInputCentered<PJ301MPort>(
+            mm2px(Vec(18.93, 97.27)), module, Ogham::CV_B_INPUT));
+        addInput(createInputCentered<PJ301MPort>(
+            mm2px(Vec(31.93, 97.27)), module, Ogham::CLK_VOCT_INPUT));
+        addInput(createInputCentered<PJ301MPort>(
+            mm2px(Vec(44.93, 97.27)), module, Ogham::SYNC_INPUT));
+
+        // Outputs: Out 1, Out 2, CV Out, EOC.
         addOutput(createOutputCentered<PJ301MPort>(
-            mm2px(Vec(8.0, 110.0)), module, Ogham::OUT1_OUTPUT));
+            mm2px(Vec(5.93, 113.77)), module, Ogham::OUT1_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(
-            mm2px(Vec(19.6, 110.0)), module, Ogham::OUT2_OUTPUT));
+            mm2px(Vec(18.93, 113.77)), module, Ogham::OUT2_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(
-            mm2px(Vec(31.2, 110.0)), module, Ogham::ENV_OUTPUT));
+            mm2px(Vec(31.93, 113.77)), module, Ogham::ENV_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(
-            mm2px(Vec(42.8, 110.0)), module, Ogham::EOC_OUTPUT));
+            mm2px(Vec(44.93, 113.77)), module, Ogham::EOC_OUTPUT));
+
+        // The two function slots have no panel control of their own — on the
+        // module the encoder is the only way to them, and the panel has no hole
+        // to spare. They remain params so a patch can carry them and the
+        // right-click browser can set them; the cost is that Rack's MIDI mapper,
+        // which maps by clicking a widget, cannot reach them. Recorded in
+        // docs/firmware-differences.md.
     }
 
     void appendContextMenu(Menu* menu) override {
