@@ -376,23 +376,23 @@ struct EncoderWidget : Widget {
 
 struct ToggleSwitch : app::Switch {
     ToggleSwitch() {
-        box.size = mm2px(math::Vec(7.0, 9.0));
+        box.size = mm2px(math::Vec(7.0, 9.5));
     }
 
     void draw(const DrawArgs& args) override {
         const float cx = box.size.x * 0.5f;
-        const float nutR = box.size.x * 0.42f;     // across the flats
-        const float cy = box.size.y * 0.66f;       // the bushing sits low
+        const float cy = box.size.y * 0.5f;         // the bushing, mid-widget
+        const float nutR = box.size.x * 0.42f;      // across the flats
+        const float reach = box.size.y * 0.40f;     // how far the bat throws
 
-        // Up when the param is at its maximum, which is V/oct — the legend has
-        // Clk above the switch and VOct below it, so the lever points at neither
-        // and both, exactly as it does on the panel.
+        // The lever points AT the legend it selects: the panel prints Clk above
+        // the switch and VOct below it, so V/oct is the down position. Param 0
+        // is Clock, param 1 is V/oct.
         float v = 0.f;
         if (getParamQuantity())
             v = getParamQuantity()->getValue() > 0.5f ? 1.f : 0.f;
-        const float tip = v > 0.5f ? cy - box.size.y * 0.52f
-                                   : cy - box.size.y * 0.10f;
-        const float lean = v > 0.5f ? -0.06f : 0.06f;
+        const float dir = (v > 0.5f) ? 1.f : -1.f;  // +1 down for V/oct
+        const float tipY = cy + dir * reach;
 
         // Shadow under the nut.
         nvgBeginPath(args.vg);
@@ -400,36 +400,13 @@ struct ToggleSwitch : app::Switch {
         nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 0x55));
         nvgFill(args.vg);
 
-        // The lever: a tapered bat with a rounded tip, leaning with the throw.
-        nvgSave(args.vg);
-        nvgTranslate(args.vg, cx, cy);
-        nvgRotate(args.vg, lean);
-        NVGpaint bat = nvgLinearGradient(args.vg, -1.2f, 0, 1.6f, 0,
-                                         nvgRGB(0xf2, 0xf4, 0xf5),
-                                         nvgRGB(0x84, 0x8c, 0x90));
-        nvgBeginPath(args.vg);
-        nvgMoveTo(args.vg, -1.5f, 0);
-        nvgLineTo(args.vg, 1.5f, 0);
-        nvgLineTo(args.vg, 0.95f, tip - cy);
-        nvgLineTo(args.vg, -0.95f, tip - cy);
-        nvgClosePath(args.vg);
-        nvgFillPaint(args.vg, bat);
-        nvgFill(args.vg);
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, 0, tip - cy, 1.35f);
-        nvgFillPaint(args.vg, bat);
-        nvgFill(args.vg);
-        nvgStrokeColor(args.vg, nvgRGBA(0x2a, 0x2f, 0x31, 0x99));
-        nvgStrokeWidth(args.vg, 0.4f);
-        nvgStroke(args.vg);
-        nvgRestore(args.vg);
-
-        // The hex nut, flats to the sides as it is fitted on the module.
+        // The hex nut, flats to the sides as it is fitted, foreshortened as if
+        // seen slightly from above.
         nvgBeginPath(args.vg);
         for (int i = 0; i < 6; i++) {
             const float a = (float)i / 6.f * 2.f * M_PI + M_PI / 6.f;
             const float x = cx + std::cos(a) * nutR;
-            const float y = cy + std::sin(a) * nutR * 0.62f;   // foreshortened
+            const float y = cy + std::sin(a) * nutR * 0.62f;
             if (i == 0) nvgMoveTo(args.vg, x, y);
             else        nvgLineTo(args.vg, x, y);
         }
@@ -444,11 +421,43 @@ struct ToggleSwitch : app::Switch {
         nvgStrokeWidth(args.vg, 0.5f);
         nvgStroke(args.vg);
 
-        // The bushing's threaded collar, just visible inside the nut.
+        // The threaded collar inside the nut, which the bat emerges from.
         nvgBeginPath(args.vg);
         nvgEllipse(args.vg, cx, cy - 0.2f, nutR * 0.46f, nutR * 0.30f);
-        nvgFillColor(args.vg, nvgRGB(0x9a, 0xa1, 0xa5));
+        nvgFillColor(args.vg, nvgRGB(0x8e, 0x95, 0x99));
         nvgFill(args.vg);
+
+        // The bat: tapered, with a rounded tip, drawn over the nut so it reads
+        // as standing proud of the panel in either throw.
+        const float baseW = box.size.x * 0.13f;
+        const float tipW  = box.size.x * 0.095f;
+        NVGpaint bat = nvgLinearGradient(args.vg, cx - baseW, 0, cx + baseW, 0,
+                                         nvgRGB(0xf4, 0xf6, 0xf7),
+                                         nvgRGB(0x7c, 0x84, 0x88));
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, cx - baseW, cy);
+        nvgLineTo(args.vg, cx + baseW, cy);
+        nvgLineTo(args.vg, cx + tipW,  tipY);
+        nvgLineTo(args.vg, cx - tipW,  tipY);
+        nvgClosePath(args.vg);
+        nvgFillPaint(args.vg, bat);
+        nvgFill(args.vg);
+
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, cx, tipY, tipW * 1.35f);
+        nvgFillPaint(args.vg, bat);
+        nvgFill(args.vg);
+        nvgStrokeColor(args.vg, nvgRGBA(0x2a, 0x2f, 0x31, 0x88));
+        nvgStrokeWidth(args.vg, 0.4f);
+        nvgStroke(args.vg);
+
+        // A highlight down the lit edge, so it reads as metal rather than card.
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, cx - baseW * 0.45f, cy);
+        nvgLineTo(args.vg, cx - tipW * 0.45f, tipY);
+        nvgStrokeColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x77));
+        nvgStrokeWidth(args.vg, 0.4f);
+        nvgStroke(args.vg);
     }
 };
 
