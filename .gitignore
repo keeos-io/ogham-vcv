@@ -30,3 +30,9 @@ dist-cross/
 
 # Apple SDK: licence-restricted, never committed. See tools/toolchain/sdk/README.md.
 tools/toolchain/sdk/MacOSX*.sdk.tar.*
+
+# Local tooling, not part of the plugin. The beads issue database is already
+# ignored by .beads/.gitignore, so the tracked files were scaffolding carrying no
+# project content, and AGENTS.md was generic boilerplate for that same tool.
+.beads/
+AGENTS.md
