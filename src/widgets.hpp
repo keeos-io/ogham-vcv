@@ -174,8 +174,18 @@ struct EncoderWidget : Widget {
     float  travel = 0.f;
     float  accum = 0.f;
 
+    // Where the knob is pointing, in detents. The module's encoder is 24 PPR, so
+    // the graphic turns exactly as the real one does: a detent is 15 degrees, and
+    // 24 of them is a revolution. Purely cosmetic — an endless encoder has no
+    // position — but it is the feedback that says a turn was registered, which
+    // matters most when a drag is small.
+    static constexpr int kDetentsPerRev = 24;
+    float angleDetents = 0.f;
+
     void pushDetents(int n) {
-        if (detents && n != 0) detents->fetch_add(n, std::memory_order_relaxed);
+        if (n == 0) return;
+        angleDetents += (float)n;
+        if (detents) detents->fetch_add(n, std::memory_order_relaxed);
     }
 
     // The gesture is over: if it never became a turn or a hold, it was a click.
@@ -273,51 +283,172 @@ struct EncoderWidget : Widget {
 
     void draw(const DrawArgs& args) override {
         const float r = box.size.x * 0.5f;
+        const float angle = angleDetents * (2.f * M_PI / kDetentsPerRev);
+
+        // Shadow, so the knob sits on the panel rather than in it.
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, r, r + 0.6f, r);
+        nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 0x66));
+        nvgFill(args.vg);
+
+        // The body: anodised gold, lit from the top left as everything else in
+        // Rack is. Two stops rather than a flat fill, because a flat gold disc
+        // reads as a sticker.
+        NVGpaint body = nvgLinearGradient(args.vg, 0, 0, 0, box.size.y,
+                                          nvgRGB(0xd8, 0xb2, 0x62),
+                                          nvgRGB(0x8a, 0x6a, 0x28));
         nvgBeginPath(args.vg);
         nvgCircle(args.vg, r, r, r);
-        nvgFillColor(args.vg, nvgRGB(0x1c, 0x20, 0x22));
+        nvgFillPaint(args.vg, body);
         nvgFill(args.vg);
-        nvgStrokeColor(args.vg, nvgRGB(0x3b, 0x46, 0x49));
-        nvgStrokeWidth(args.vg, 1.f);
+        nvgStrokeColor(args.vg, nvgRGB(0x6b, 0x51, 0x1c));
+        nvgStrokeWidth(args.vg, 0.8f);
         nvgStroke(args.vg);
 
-        // Knurling: a ring of ticks, so it reads as a thing you turn rather than
-        // a thing you point.
-        for (int i = 0; i < 24; i++) {
-            const float a = (float)i / 24.f * 2.f * M_PI;
+        // Knurling, turning with the knob. Fine flutes rather than teeth: the
+        // module's encoder cap is a machined collar, not a chicken head.
+        nvgSave(args.vg);
+        nvgTranslate(args.vg, r, r);
+        nvgRotate(args.vg, angle);
+        for (int i = 0; i < kDetentsPerRev * 2; i++) {
+            const float a = (float)i / (kDetentsPerRev * 2) * 2.f * M_PI;
+            const float c = std::cos(a), sn = std::sin(a);
             nvgBeginPath(args.vg);
-            nvgMoveTo(args.vg, r + std::cos(a) * r * 0.72f,
-                               r + std::sin(a) * r * 0.72f);
-            nvgLineTo(args.vg, r + std::cos(a) * r * 0.92f,
-                               r + std::sin(a) * r * 0.92f);
-            nvgStrokeColor(args.vg, nvgRGBA(0xb0, 0x8d, 0x3f, 0x88));
-            nvgStrokeWidth(args.vg, 0.8f);
+            nvgMoveTo(args.vg, c * r * 0.80f, sn * r * 0.80f);
+            nvgLineTo(args.vg, c * r * 0.97f, sn * r * 0.97f);
+            nvgStrokeColor(args.vg, (i % 2) ? nvgRGBA(0x5a, 0x42, 0x14, 0x99)
+                                            : nvgRGBA(0xff, 0xe6, 0xac, 0x55));
+            nvgStrokeWidth(args.vg, 0.7f);
             nvgStroke(args.vg);
         }
 
-        // The cap shows what the gesture has become: amber while a hold is being
-        // counted towards the menu, and the hold's progress as a ring, so it is
-        // clear whether you are about to change mode or about to turn.
-        NVGcolor cap = nvgRGB(0x23, 0x2b, 0x2e);
-        if (turning)        cap = nvgRGB(0x2a, 0x33, 0x36);
-        else if (longFired) cap = nvgRGB(0x3a, 0x44, 0x33);
-        else if (armed)     cap = nvgRGB(0x33, 0x2e, 0x22);
+        // The dished top, and the indicator flat on its edge.
+        NVGpaint dish = nvgRadialGradient(args.vg, -r * 0.25f, -r * 0.3f,
+                                          r * 0.1f, r * 0.8f,
+                                          nvgRGB(0xe8, 0xc6, 0x80),
+                                          nvgRGB(0x9a, 0x77, 0x30));
         nvgBeginPath(args.vg);
-        nvgCircle(args.vg, r, r, r * 0.6f);
-        nvgFillColor(args.vg, cap);
+        nvgCircle(args.vg, 0, 0, r * 0.72f);
+        nvgFillPaint(args.vg, dish);
         nvgFill(args.vg);
 
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, 0, -r * 0.24f);
+        nvgLineTo(args.vg, 0, -r * 0.66f);
+        nvgStrokeColor(args.vg, nvgRGBA(0x3a, 0x2a, 0x0c, 0xcc));
+        nvgStrokeWidth(args.vg, 1.1f);
+        nvgLineCap(args.vg, NVG_ROUND);
+        nvgStroke(args.vg);
+        nvgRestore(args.vg);
+
+        // A hold darkens the cap, and its progress runs round the rim — the only
+        // sign that the menu is about to open rather than a turn beginning.
         if (armed && !turning && !longFired) {
+            nvgBeginPath(args.vg);
+            nvgCircle(args.vg, r, r, r * 0.72f);
+            nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 0x33));
+            nvgFill(args.vg);
+
             const float t = (float)((system::getTime() - downTime) / kLongPressSec);
             if (t > 0.05f) {
                 nvgBeginPath(args.vg);
-                nvgArc(args.vg, r, r, r * 0.78f, -M_PI * 0.5f,
+                nvgArc(args.vg, r, r, r * 0.88f, -M_PI * 0.5f,
                        -M_PI * 0.5f + std::min(t, 1.f) * 2.f * M_PI, NVG_CW);
-                nvgStrokeColor(args.vg, nvgRGB(0xb0, 0x8d, 0x3f));
-                nvgStrokeWidth(args.vg, 1.6f);
+                nvgStrokeColor(args.vg, nvgRGB(0xff, 0xf0, 0xc8));
+                nvgStrokeWidth(args.vg, 1.4f);
                 nvgStroke(args.vg);
             }
         }
+    }
+};
+
+// ---------------------------------------------------------------------------
+// A metal toggle with a hex nut, for the Clk / VOct switch.
+//
+// The module's is a Dailywell SPDT — a threaded bushing through the panel with a
+// hex nut and a bat lever, which is a different object entirely from the plastic
+// slide switch Rack's component library offers. Drawn rather than photographed
+// so it sits at any zoom.
+//
+// Switch gives it the click-to-toggle behaviour and the param binding; only the
+// drawing is ours.
+// ---------------------------------------------------------------------------
+
+struct ToggleSwitch : app::Switch {
+    ToggleSwitch() {
+        box.size = mm2px(math::Vec(7.0, 9.0));
+    }
+
+    void draw(const DrawArgs& args) override {
+        const float cx = box.size.x * 0.5f;
+        const float nutR = box.size.x * 0.42f;     // across the flats
+        const float cy = box.size.y * 0.66f;       // the bushing sits low
+
+        // Up when the param is at its maximum, which is V/oct — the legend has
+        // Clk above the switch and VOct below it, so the lever points at neither
+        // and both, exactly as it does on the panel.
+        float v = 0.f;
+        if (getParamQuantity())
+            v = getParamQuantity()->getValue() > 0.5f ? 1.f : 0.f;
+        const float tip = v > 0.5f ? cy - box.size.y * 0.52f
+                                   : cy - box.size.y * 0.10f;
+        const float lean = v > 0.5f ? -0.06f : 0.06f;
+
+        // Shadow under the nut.
+        nvgBeginPath(args.vg);
+        nvgEllipse(args.vg, cx, cy + 0.8f, nutR * 1.05f, nutR * 0.62f);
+        nvgFillColor(args.vg, nvgRGBA(0, 0, 0, 0x55));
+        nvgFill(args.vg);
+
+        // The lever: a tapered bat with a rounded tip, leaning with the throw.
+        nvgSave(args.vg);
+        nvgTranslate(args.vg, cx, cy);
+        nvgRotate(args.vg, lean);
+        NVGpaint bat = nvgLinearGradient(args.vg, -1.2f, 0, 1.6f, 0,
+                                         nvgRGB(0xf2, 0xf4, 0xf5),
+                                         nvgRGB(0x84, 0x8c, 0x90));
+        nvgBeginPath(args.vg);
+        nvgMoveTo(args.vg, -1.5f, 0);
+        nvgLineTo(args.vg, 1.5f, 0);
+        nvgLineTo(args.vg, 0.95f, tip - cy);
+        nvgLineTo(args.vg, -0.95f, tip - cy);
+        nvgClosePath(args.vg);
+        nvgFillPaint(args.vg, bat);
+        nvgFill(args.vg);
+        nvgBeginPath(args.vg);
+        nvgCircle(args.vg, 0, tip - cy, 1.35f);
+        nvgFillPaint(args.vg, bat);
+        nvgFill(args.vg);
+        nvgStrokeColor(args.vg, nvgRGBA(0x2a, 0x2f, 0x31, 0x99));
+        nvgStrokeWidth(args.vg, 0.4f);
+        nvgStroke(args.vg);
+        nvgRestore(args.vg);
+
+        // The hex nut, flats to the sides as it is fitted on the module.
+        nvgBeginPath(args.vg);
+        for (int i = 0; i < 6; i++) {
+            const float a = (float)i / 6.f * 2.f * M_PI + M_PI / 6.f;
+            const float x = cx + std::cos(a) * nutR;
+            const float y = cy + std::sin(a) * nutR * 0.62f;   // foreshortened
+            if (i == 0) nvgMoveTo(args.vg, x, y);
+            else        nvgLineTo(args.vg, x, y);
+        }
+        nvgClosePath(args.vg);
+        NVGpaint nut = nvgLinearGradient(args.vg, cx, cy - nutR * 0.6f,
+                                         cx, cy + nutR * 0.6f,
+                                         nvgRGB(0xd6, 0xda, 0xdc),
+                                         nvgRGB(0x77, 0x7e, 0x82));
+        nvgFillPaint(args.vg, nut);
+        nvgFill(args.vg);
+        nvgStrokeColor(args.vg, nvgRGB(0x4a, 0x51, 0x55));
+        nvgStrokeWidth(args.vg, 0.5f);
+        nvgStroke(args.vg);
+
+        // The bushing's threaded collar, just visible inside the nut.
+        nvgBeginPath(args.vg);
+        nvgEllipse(args.vg, cx, cy - 0.2f, nutR * 0.46f, nutR * 0.30f);
+        nvgFillColor(args.vg, nvgRGB(0x9a, 0xa1, 0xa5));
+        nvgFill(args.vg);
     }
 };
 

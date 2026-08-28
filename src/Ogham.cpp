@@ -495,9 +495,13 @@ struct OghamWidget : ModuleWidget {
         setModule(module);
         setPanel(createPanel(asset::plugin(pluginInstance, "res/Ogham.svg")));
 
-        addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-        addChild(createWidget<ScrewSilver>(
-            Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
+        // Four screws, where the module's mounting slots actually are:
+        // PanelPCB-v2 puts them 7.5 mm in from each edge and 3 mm down from the
+        // top and up from the bottom, which is the Eurorack standard and not
+        // quite Rack's default grid positions.
+        for (float x : {7.65f, 43.21f})
+            for (float y : {3.0f, 125.5f})
+                addChild(createWidgetCentered<ScrewSilver>(mm2px(Vec(x, y))));
 
         // Positions come from the production panel: PanelPCB-v2's Edge.Cuts
         // for the holes, and the legends in the production graphics for which
@@ -529,7 +533,7 @@ struct OghamWidget : ModuleWidget {
         addChild(enc);
 
         // Top row: the Clk/VOct switch, and Rate/Fine.
-        addParam(createParamCentered<CKSS>(
+        addParam(createParamCentered<ogham::ToggleSwitch>(
             mm2px(Vec(25.43, 45.19)), module, Ogham::MODE_PARAM));
         addParam(createParamCentered<RoundBlackKnob>(
             mm2px(Vec(43.43, 45.19)), module, Ogham::RATE_PARAM));
