@@ -64,6 +64,22 @@ failed on the missing headers — a confusing way to learn that `dep/` is Rack's
 scratch space for dependencies a build can re-fetch, not a place for source that
 must survive. It now lives in `daisysp-src/`, alongside `ogham-src/`.
 
+### What it produced
+
+Both targets, verified rather than assumed — a file with the right name proves
+nothing:
+
+| | |
+|---|---|
+| `Keeos-2.0.0-win-x64.vcvplugin` | PE32+ DLL, x86-64, stripped |
+| `Keeos-2.0.0-lin-x64.vcvplugin` | ELF 64-bit shared object, x86-64, stripped |
+| Linux glibc floor | **GLIBC_2.14**, which is 2011 |
+| Linux dependencies | `libRack.so`, `libm`, `libc` — no libstdc++ |
+
+That glibc figure is the whole point of the Ubuntu 16.04 sysroot: the binary runs
+on distributions far older than the machine that built it, which a native
+`ubuntu-latest` build would not.
+
 ## macOS
 
 Three routes. Which one matters depends on whether a Mac is to hand.

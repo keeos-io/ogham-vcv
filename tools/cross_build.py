@@ -20,15 +20,18 @@
 # see tools/toolchain/sdk/README.md. Two images are therefore possible, and the
 # tag says which one you have: :win-lin, or :all when it can build all four.
 #
-# The container builds the working tree in place, and the toolchain runs
-# `make clean` around each target — so a cross build removes the local plugin.dll
-# and build/. Run `make` again to get them back.
+# The container builds a staged copy, never the working tree, so a cross build
+# leaves the local plugin.dll and build/ alone. That is not politeness: the .d
+# files a Windows build leaves in build/ name paths like D:/VCV/..., and GNU make
+# inside the container reads that colon as a target separator and stops with
+# "multiple target patterns" before any rule — `make clean` included — can run.
 # -----------------------------------------------------------------------------
 
 import argparse
 import glob
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -38,7 +41,14 @@ IMAGE_WINLIN = "ogham-toolchain:win-lin"   # everything reachable without a Mac
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "dist-cross")
+STAGE = os.path.join(OUT, "src")
 SDK_DIR = os.path.join(ROOT, "tools", "toolchain", "sdk")
+
+# What the container never needs to see. build/ and dist/ matter most: they hold
+# this machine's Windows artifacts.
+STAGE_IGNORE = shutil.ignore_patterns(
+    ".git", ".beads", "build", "build_host", "dist", "dist-cross",
+    "__pycache__", "*.dll", "*.so", "*.dylib")
 
 TARGETS = {
     "win": "plugin-build-win-x64",
@@ -104,11 +114,25 @@ def build_image(jobs):
     print("\nBuilt %s." % image)
 
 
-def run_in_image(image, command):
+def stage_sources():
+    # A clean copy for the container to build. A few MB of source and SVG, and
+    # worth it twice over: the working tree keeps its Windows build, and the
+    # container never sees a .d file written by it.
+    def drop_readonly(func, path, _exc):
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+
+    if os.path.isdir(STAGE):
+        shutil.rmtree(STAGE, onerror=drop_readonly)
+    shutil.copytree(ROOT, STAGE, ignore=STAGE_IGNORE)
+    return STAGE
+
+
+def run_in_image(image, command, source=None):
     os.makedirs(OUT, exist_ok=True)
     return docker(
         "run", "--rm",
-        "--volume", "%s:/home/build/plugin-src" % ROOT,
+        "--volume", "%s:/home/build/plugin-src" % (source or ROOT),
         "--volume", "%s:/home/build/rack-plugin-toolchain/plugin-build" % OUT,
         "--env", "PLUGIN_DIR=/home/build/plugin-src",
         image, "/bin/bash", "-c", command).returncode
@@ -159,11 +183,13 @@ def main():
                  "  See tools/toolchain/sdk/README.md." % image)
 
     print("Using %s" % image)
+    source = stage_sources()
     failed = []
     for t in todo:
         print("\n=== %s ===" % t, flush=True)
         t0 = time.time()
-        rc = run_in_image(image, "make %s -j%d" % (TARGETS[t], args.jobs))
+        rc = run_in_image(image, "make %s -j%d" % (TARGETS[t], args.jobs),
+                          source)
         if rc != 0:
             failed.append(t)
             print("  FAILED (exit %d)" % rc)
@@ -171,6 +197,7 @@ def main():
             print("  built in %.0f s" % (time.time() - t0))
 
     print()
+    shutil.rmtree(STAGE, ignore_errors=True)
     if os.path.isdir(OUT):
         for f in sorted(os.listdir(OUT)):
             path = os.path.join(OUT, f)
@@ -179,8 +206,6 @@ def main():
     if failed:
         print("\nFAILED: %s" % ", ".join(failed))
         return 1
-    print("\nThe local plugin.dll and build/ were cleaned by the toolchain; "
-          "run `make` to rebuild them.")
     return 0
 
 
