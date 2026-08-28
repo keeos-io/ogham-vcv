@@ -63,10 +63,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: lin-x64,   os: ubuntu-latest, sdk: lin-x64 }
-          - { name: mac-x64,   os: macos-13,      sdk: mac-x64 }
-          - { name: mac-arm64, os: macos-14,      sdk: mac-arm64 }
+          - { name: lin-x64,   os: ubuntu-latest,  sdk: lin-x64 }
+          - { name: mac-arm64, os: macos-14,       sdk: mac-arm64 }
           - { name: win-x64,   os: windows-latest, sdk: win-x64 }
+          # mac-x64 is deliberately absent. It needs a macos-13 runner — Intel
+          # hardware Apple no longer sells and GitHub is winding down — so the
+          # pool is small and the job sat queued for over twenty minutes while
+          # every other target finished, holding the run's logs hostage with it.
+          #
+          # Nothing is lost by leaving it out. The VCV Library builds mac-x64
+          # itself from source, whatever this workflow does; the local toolchain
+          # cross-compiles it here in about four seconds; and the binary it
+          # produces has been verified as genuine Mach-O X86_64, ad-hoc signed,
+          # targeting macOS 10.9. mac-arm64 still runs on a real Mac here, which
+          # is what catches anything Apple's clang would object to.
     steps:
       - uses: actions/checkout@v4
 
@@ -84,9 +94,13 @@ jobs:
         with:
           msystem: MINGW64
           update: false
+          # jq is not optional and not obvious: Rack's plugin.mk shells out to it
+          # to read the slug and version out of plugin.json, and without it the
+          # build dies at "SLUG could not be found in manifest" — which reads
+          # like a broken manifest rather than a missing tool.
           install: >-
             mingw-w64-x86_64-gcc
-            make unzip zstd tar coreutils
+            make unzip zstd tar coreutils jq
 
       # Fetched in the shell that will do the build, so RACK_DIR is written in
       # the form that shell understands. Two steps rather than one with an
