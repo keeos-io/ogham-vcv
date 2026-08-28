@@ -157,24 +157,6 @@ struct Ogham : Module {
     std::atomic<bool>     menuToggle{false};
     std::atomic<uint32_t> displaySegments{0};
 
-    // Does dragging the encoder turn it?
-    //
-    // On the module you turn a shaft, and Rack's own convention is that dragging
-    // a knob turns it, so yes — everywhere except macOS. There, dragging is the
-    // reflex for moving around a patch, and a drag that passes over the encoder
-    // changing the function instead reads as the module misbehaving rather than
-    // as a knob being turned. Defaulted off there and settable either way here,
-    // because a Mac with a mouse is a different proposition from a trackpad, and
-    // no build-time guess covers both.
-    //
-    // Read by the widget on the UI thread and written only from the menu, so a
-    // plain bool is enough; the audio thread never looks at it.
-#if defined ARCH_MAC
-    bool encoderDragTurns = false;
-#else
-    bool encoderDragTurns = true;
-#endif
-
     int lastFunc1 = -1, lastFunc2 = -1;
 
     Ogham() {
@@ -313,8 +295,6 @@ struct Ogham : Module {
         json_object_set_new(root, "schemaVersion", json_integer(1));
         json_object_set_new(root, "selectedVoice", json_integer(app.SelectedVoice()));
         json_object_set_new(root, "menuField", json_integer(app.MenuField()));
-        json_object_set_new(root, "encoderDragTurns",
-                            json_boolean(encoderDragTurns));
 
         json_t* j = json_object();
         json_object_set_new(j, "enabled", json_boolean(fx.enabled != 0));
@@ -373,14 +353,6 @@ struct Ogham : Module {
 
         app.SetSelectedVoice(num(root, "selectedVoice", 0));
         app.SetMenuField(num(root, "menuField", 0));
-
-        // The setting travels with the patch, as module settings do. Only the
-        // fallback is this build's default, which is what patches saved before
-        // the option existed get — so an old patch opened on a Mac picks up the
-        // Mac behaviour rather than a value it never stored. A patch saved on
-        // Windows does carry `true`, and will turn drag back on here; toggling
-        // it once and resaving settles that patch.
-        encoderDragTurns = flag(root, "encoderDragTurns", encoderDragTurns);
 
         json_t* j = json_object_get(root, "fx");
         fx.enabled  = flag(j, "enabled", true) ? 1 : 0;
@@ -566,10 +538,9 @@ struct OghamWidget : ModuleWidget {
         ogham::EncoderWidget* enc = new ogham::EncoderWidget;
         enc->box.pos = mm2px(Vec(7.53, 45.19)).minus(enc->box.size.div(2));
         if (module) {
-            enc->detents   = &module->encDetents;
-            enc->clicks    = &module->encClicks;
-            enc->longs     = &module->encLongs;
-            enc->dragTurns = &module->encoderDragTurns;
+            enc->detents = &module->encDetents;
+            enc->clicks  = &module->encClicks;
+            enc->longs   = &module->encLongs;
         }
         addChild(enc);
 
@@ -656,10 +627,14 @@ struct OghamWidget : ModuleWidget {
 
         // --- How the encoder takes a mouse ----------------------------------
         menu->addChild(new MenuSeparator);
+        // Stored per installation rather than in the patch: how the encoder
+        // answers a mouse is a property of this desk, and opening someone
+        // else's patch should not change it.
         menu->addChild(createCheckMenuItem(
-            "Drag turns the encoder", "",
-            [=]() { return m->encoderDragTurns; },
-            [=]() { m->encoderDragTurns = !m->encoderDragTurns; }));
+            "Drag turns the encoder", "this computer",
+            []() { return ogham::prefs::DragTurnsEncoder(); },
+            []() { ogham::prefs::SetDragTurnsEncoder(
+                       !ogham::prefs::DragTurnsEncoder()); }));
 
         // --- The Menu ------------------------------------------------------
         menu->addChild(new MenuSeparator);

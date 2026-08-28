@@ -14,6 +14,7 @@
 #pragma once
 
 #include "plugin.hpp"
+#include "prefs.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -149,19 +150,13 @@ struct SevenSegmentDisplay : Widget {
 // ---------------------------------------------------------------------------
 
 struct EncoderWidget : Widget {
-    // Whether a drag turns the encoder. Points at the module's own setting so it
-    // travels with the patch; null in the browser preview, where nothing is
-    // dragged anyway.
+    // Whether a drag turns the encoder. A per-installation setting, not patch
+    // state: how the encoder answers a mouse belongs to the desk it is used at,
+    // so opening someone else's patch must not change it. See prefs.hpp.
     //
-    // Turning on drag is Rack's convention for a knob, and it is what the
-    // hardware gesture maps onto, so it stays the default — except on macOS,
-    // where dragging is the reflex for moving around a patch and having it
-    // change the function instead comes as a surprise. Switched off, the encoder
-    // still turns by scroll and still takes clicks and holds; only the drag goes
-    // quiet.
-    const bool* dragTurns = nullptr;
-
-    bool DragTurns() const { return dragTurns ? *dragTurns : true; }
+    // Switched off, the encoder still turns by scroll and still takes clicks and
+    // holds; only the drag goes quiet.
+    bool DragTurns() const { return ogham::prefs::DragTurnsEncoder(); }
 
     std::atomic<int>* detents = nullptr;
     std::atomic<int>* clicks  = nullptr;
