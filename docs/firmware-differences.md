@@ -50,7 +50,7 @@ each becomes its ideal value; reproducing them would be reproducing the errors.
 | Area | Module | Plugin | Status | Permanent? |
 |---|---|---|---|---|
 | `AUDIO_OUT_LEVEL` | 0.51, halving the digital output to compensate an analog stage running ~2× hot | 1.0 | live | Converge if the hardware gain is ever halved |
-| Audio scaling | ~10 Vpp at the jack | ×5 V, so nominal level is ±5 V. Measured peaks: ±1.28 on the smoke script, ±1.53 on the demo, so ±6.4 to ±7.6 V | live | Open — `ovcv-maw` |
+| Audio scaling | ~10 Vpp at the jack | ×5 V. Settled, and it is hardware-true: the module's own jack does 4.97 V for digital 1.0 and 7.61 V on the demo's peaks against the plugin's 5.00 and 7.65 | live | Yes |
 | ENV Out | DAC 0–3.3 V through a TL072 to roughly 0–10 V | ×10 V from the same 0–1 the DAC is handed | live | Yes |
 | Clock timestamps | `System::GetUs()`, which wraps every ~17.9 s and needs a signed-difference guard | A 64-bit core-sample counter, which cannot wrap in a session. The guard is not transcribed — one of the few places where less code is the faithful translation | live | Yes |
 | Clk / VOct jack | One jack into both a comparator and an ADC tap; the clock ISR runs whatever the Mode switch says | Edges are only read in Clock mode; in V/oct the jack is a pitch CV and nothing else | live | Yes |
@@ -184,3 +184,24 @@ instances sharing state. They were not. Each was starting from different
 rubbish, and the harness's own solo runs — stack-allocated, one after another at
 the same address — were inheriting each other's leftovers. The test now
 value-initialises both paths, so it compares like with like.
+
+**Nothing clamps the outputs, deliberately.** Rack's voltage standards ask for
+±5 V typical and then argue against enforcing it: "It is much better to allow
+voltages outside this range rather than use hard clipping … because in the best
+case they will be attenuated by a module downstream, and in the worst case, they
+will be hard clipped by the Audio module from Core." The ceiling that matters is
+the ±12 V rail, and nothing here approaches it.
+
+Measured, so the question does not have to be reopened:
+
+| | |
+|---|---|
+| Nominal (digital 1.0) | ±5.00 V |
+| Full wavefold, Tone hard anticlockwise | ±4.98 V — inside ±5 V |
+| With the FX chain running | ±6.4 V typical, ±7.6 V on peaks |
+| Rail | ±12 V, never approached |
+
+The flat-topped look at full fold on a scope is the lo-fi macro's saturator
+doing its job, not an overflow: 18.6 % of samples sit within 1 % of the peak but
+only 0.002 % sit exactly on it, so the waveform is saturated rather than clipped.
+Turning the scope's volts-per-division down shows the shape.
