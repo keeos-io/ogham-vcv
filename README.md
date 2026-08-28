@@ -43,8 +43,9 @@ that is not in that file is a bug.
 
 The panel is the module's, at hardware size and hardware layout, so anything
 written about the module applies here. The
-[module manual](https://github.com/keeos-io/ogham) is the full account; this is
-what a Rack user needs.
+[Ogham manual](https://keeos.io/docs/ogham-manual/)
+([PDF](https://keeos.io/docs/ogham-manual.pdf)) is the full account; this is what
+a Rack user needs.
 
 ### The panel
 
