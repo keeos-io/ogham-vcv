@@ -76,6 +76,25 @@ one line. Builds that feed a comparison carry `-ffp-contract=off`; see the
 build-determinism note in `docs/firmware-differences.md` for why that matters
 and what bit-exactness can and cannot be claimed across compilers.
 
+### The other three platforms
+
+Rack ships plugins for `win-x64`, `mac-x64`, `mac-arm64` and `lin-x64`, and all
+four are built here.
+
+```sh
+python tools/cross_build.py image     # once, about an hour
+python tools/cross_build.py win lin   # packages into dist-cross/
+```
+
+That image is VCV's plugin toolchain with the macOS target removed, because the
+macOS SDK can only be extracted on a Mac and Apple does not permit
+redistributing it — and their Dockerfile needs it before it reaches the two
+toolchains that have no use for it. The two Mac builds are covered instead by
+GitHub Actions, whose runners are Macs, and by the VCV Library, which compiles
+all four platforms itself at submission.
+
+[`docs/cross-compiling.md`](docs/cross-compiling.md) has the detail.
+
 ## Licence
 
 MIT — see `LICENSE.txt`. Third-party components and their licences are listed in

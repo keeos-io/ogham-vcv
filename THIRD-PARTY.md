@@ -15,7 +15,7 @@ plugin's behaviour departs from the module's.
 <https://github.com/electro-smith/DaisySP> — MIT, © 2020 Electrosmith, Corp.
 
 The FX chain uses `Chorus`, `Flanger`, `Phaser` and `DelayLine`, vendored under
-`dep/daisysp/`. Only those four; the rest of DaisySP is not used.
+`daisysp-src/`. Only those four; the rest of DaisySP is not used.
 
 ## VCV Rack API
 

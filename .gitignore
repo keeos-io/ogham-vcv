@@ -26,3 +26,4 @@ tests/parity/out/
 .idea/
 Thumbs.db
 desktop.ini
+dist-cross/

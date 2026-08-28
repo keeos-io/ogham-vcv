@@ -1,0 +1,121 @@
+# -----------------------------------------------------------------------------
+# Ogham for VCV Rack — build and test on all four platforms
+#
+# SPDX-FileCopyrightText: 2026 Steven Collins <https://keeos.io>
+# SPDX-License-Identifier: MIT
+# -----------------------------------------------------------------------------
+#
+# The two macOS targets are the reason this exists. Apple's SDK cannot be
+# redistributed and can only be extracted on a Mac, so a Windows workstation
+# cannot cross-compile for macOS at all — but GitHub's runners ARE Macs, with
+# Xcode already on them, free for public repositories. macos-13 is x64 and
+# macos-14 is arm64, and both simply compile the plugin natively.
+#
+# The Linux job here builds against the runner's own glibc, which is far newer
+# than Rack users' distributions. It proves the code compiles and the tests pass;
+# release binaries come from the pinned toolchain image, which builds against an
+# Ubuntu 16.04 sysroot. See docs/cross-compiling.md.
+# -----------------------------------------------------------------------------
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  RACK_SDK_VERSION: 2.6.6
+
+jobs:
+  # The parity, converter and multi-instance tests. These are the ones that say
+  # the port still sounds like the module, so they run before anything is built
+  # for distribution.
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the vendored firmware is untouched
+        run: python tools/upstream_check.py
+      - name: Build and run
+        run: make -f tools/host.mk tests
+      - name: Compile with clang as well
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends clang
+          make -f tools/host.mk check
+
+  plugin:
+    name: ${{ matrix.name }}
+    needs: tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: lin-x64,   os: ubuntu-latest, sdk: lin-x64 }
+          - { name: mac-x64,   os: macos-13,      sdk: mac-x64 }
+          - { name: mac-arm64, os: macos-14,      sdk: mac-arm64 }
+          - { name: win-x64,   os: windows-latest, sdk: win-x64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zstd unzip rsync
+
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install zstd
+
+      - name: Install build tools (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            make unzip zstd tar coreutils
+
+      # Run in the same shell that will do the build, so the RACK_DIR path is
+      # written in the form that shell understands.
+      - name: Fetch the Rack SDK
+        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        run: |
+          curl -fL -o rack-sdk.zip \
+            "https://vcvrack.com/downloads/Rack-SDK-${RACK_SDK_VERSION}-${{ matrix.sdk }}.zip"
+          unzip -q rack-sdk.zip
+          echo "RACK_DIR=$PWD/Rack-SDK" >> "$GITHUB_ENV"
+
+      - name: Build
+        if: runner.os != 'Windows'
+        run: make -j$(getconf _NPROCESSORS_ONLN) dist
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: make -j$(nproc) dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ogham-${{ matrix.name }}
+          path: dist/*.vcvplugin
+          if-no-files-found: error
+
+  # Tagged pushes collect the four packages into a draft release.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: plugin
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/**/*.vcvplugin
