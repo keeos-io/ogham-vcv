@@ -40,9 +40,3 @@ with credit — which this is:
 
 The panel artwork itself is the module's own, and the display and the encoder's
 behaviour are drawn here.
-
-**This is the one thing that would have to change before this plugin could be
-sold outside the VCV Library.** CC BY-NC permits the free distribution and the
-recolouring, and nothing else. Redrawing these five graphics is the whole of the
-work involved, and it is worth knowing that in advance rather than discovering it
-at the point of deciding.

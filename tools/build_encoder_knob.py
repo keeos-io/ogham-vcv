@@ -16,8 +16,7 @@
 #
 # The result is a derivative of a VCV Component Library graphic, which is
 # CC BY-NC 4.0 — fine for a plugin distributed free of charge, with the credit in
-# THIRD-PARTY.md. It is one of the things that would have to be redrawn from
-# scratch before this could ever be sold outside the VCV Library.
+# THIRD-PARTY.md.
 #
 #   python tools/build_encoder_knob.py
 
