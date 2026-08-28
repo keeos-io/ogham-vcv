@@ -18,6 +18,12 @@ first release is 2.0.0 rather than 1.0.0.
 - The encoder takes the module's gestures. Drag or scroll to change function,
   click to swap voices, hold to open the FX menu, then click to edit a field and
   hold to leave.
+- **Drag turns the encoder** is a right-click option, on by default and **off on
+  macOS**. Dragging a knob to turn it is Rack's convention everywhere, but on a
+  Mac dragging is the reflex for moving around a patch, and a drag that crosses
+  the encoder changing the function reads as a fault rather than a knob. With it
+  off the encoder still turns by scroll and still takes clicks and holds. The
+  setting travels with the patch.
 - Patches save the full FX chain, both functions and the menu position, the way
   the module persists them to flash.
 - Runs at any host sample rate. The DSP runs at 48 kHz exactly as on hardware and

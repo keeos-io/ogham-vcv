@@ -149,6 +149,20 @@ struct SevenSegmentDisplay : Widget {
 // ---------------------------------------------------------------------------
 
 struct EncoderWidget : Widget {
+    // Whether a drag turns the encoder. Points at the module's own setting so it
+    // travels with the patch; null in the browser preview, where nothing is
+    // dragged anyway.
+    //
+    // Turning on drag is Rack's convention for a knob, and it is what the
+    // hardware gesture maps onto, so it stays the default — except on macOS,
+    // where dragging is the reflex for moving around a patch and having it
+    // change the function instead comes as a surprise. Switched off, the encoder
+    // still turns by scroll and still takes clicks and holds; only the drag goes
+    // quiet.
+    const bool* dragTurns = nullptr;
+
+    bool DragTurns() const { return dragTurns ? *dragTurns : true; }
+
     std::atomic<int>* detents = nullptr;
     std::atomic<int>* clicks  = nullptr;
     std::atomic<int>* longs   = nullptr;
@@ -288,13 +302,16 @@ struct EncoderWidget : Widget {
         Widget::step();
     }
 
+    // The cursor is locked only when a drag can actually turn something. Locking
+    // it otherwise would hide the pointer for a gesture that does nothing, and
+    // would also suppress the button release (see endGesture) for no reason.
     void onDragStart(const event::DragStart& e) override {
-        APP->window->cursorLock();
+        if (DragTurns()) APP->window->cursorLock();
         Widget::onDragStart(e);
     }
 
     void onDragEnd(const event::DragEnd& e) override {
-        APP->window->cursorUnlock();
+        if (DragTurns()) APP->window->cursorUnlock();
         endGesture();
         Widget::onDragEnd(e);
     }
@@ -305,7 +322,10 @@ struct EncoderWidget : Widget {
         // it looks like to the person doing it. Once the long press has fired the
         // gesture is settled and dragging does nothing, matching a module whose
         // menu you have just entered with the shaft still under your thumb.
-        if (armed && !longFired) {
+        // With drag turned off the gesture never becomes a turn, so the press is
+        // still live as a click or a hold when the button comes up. Moving the
+        // mouse then does nothing at all rather than something unexpected.
+        if (armed && !longFired && DragTurns()) {
             travel += std::fabs(e.mouseDelta.y) + std::fabs(e.mouseDelta.x);
             if (!turning && travel > kMoveThreshold) turning = true;
         }
