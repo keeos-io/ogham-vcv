@@ -53,7 +53,7 @@ jobs:
       - name: Static analysis
         run: |
           sudo apt-get install -y --no-install-recommends cppcheck
-          cppcheck src/ --std=c++11 -j$(nproc) --check-level=exhaustive             --error-exitcode=1 --enable=warning,performance,portability             --suppress=missingInclude --inline-suppr
+          cppcheck src/ --std=c++11 -j$(nproc) --check-level=exhaustive --error-exitcode=1 --enable=warning,performance,portability --suppress=missingInclude --inline-suppr
 
   plugin:
     name: ${{ matrix.name }}
@@ -88,10 +88,22 @@ jobs:
             mingw-w64-x86_64-gcc
             make unzip zstd tar coreutils
 
-      # Run in the same shell that will do the build, so the RACK_DIR path is
-      # written in the form that shell understands.
+      # Fetched in the shell that will do the build, so RACK_DIR is written in
+      # the form that shell understands. Two steps rather than one with an
+      # expression in `shell:` — that is not a place expressions are reliably
+      # allowed, and it failed the entire workflow at startup, in zero seconds,
+      # rather than at the step.
       - name: Fetch the Rack SDK
-        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        if: runner.os != 'Windows'
+        run: |
+          curl -fL -o rack-sdk.zip \
+            "https://vcvrack.com/downloads/Rack-SDK-${RACK_SDK_VERSION}-${{ matrix.sdk }}.zip"
+          unzip -q rack-sdk.zip
+          echo "RACK_DIR=$PWD/Rack-SDK" >> "$GITHUB_ENV"
+
+      - name: Fetch the Rack SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: |
           curl -fL -o rack-sdk.zip \
             "https://vcvrack.com/downloads/Rack-SDK-${RACK_SDK_VERSION}-${{ matrix.sdk }}.zip"
