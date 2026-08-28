@@ -337,9 +337,23 @@ struct EncoderWidget : Widget {
     }
 
     void onHoverScroll(const event::HoverScroll& e) override {
-        // The wheel stands in for a drag anywhere a drag would turn the encoder,
-        // and touches the button not at all — which makes it the unambiguous way
-        // to turn, and the one to reach for while editing a menu value.
+        // Scrolling turns the encoder only when Rack has been told that scroll
+        // wheels adjust knobs. That setting is off by default, and it exists to
+        // settle exactly this conflict: without it, scroll belongs to the view.
+        //
+        // This widget used to take the wheel unconditionally, which broke
+        // panning over the encoder on every platform, and was unmissable on a
+        // Mac — a two-finger trackpad gesture IS a scroll, so the natural way to
+        // move around a patch turned the function instead whenever the pointer
+        // happened to be over the knob.
+        //
+        // Not consuming the event is the whole point: unconsumed, it travels on
+        // and the view scrolls, exactly as it does over any other module.
+        if (!settings::knobScroll) {
+            Widget::onHoverScroll(e);
+            return;
+        }
+
         const int n = (e.scrollDelta.y > 0.f) ? 1 : (e.scrollDelta.y < 0.f ? -1 : 0);
         if (n != 0) {
             pushDetents(n);

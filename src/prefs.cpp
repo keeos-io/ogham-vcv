@@ -18,23 +18,24 @@ namespace {
 const char* kDir  = "Keeos";
 const char* kFile = "Keeos/settings.json";
 
-// Dragging a knob to turn it is Rack's convention on every platform, and it is
-// what the module's own gesture maps onto — so it is the default. Except on
-// macOS, where dragging is the reflex for moving around a patch, and a drag that
-// crosses the encoder changing the function reads as a fault rather than as a
-// knob being turned.
+// On, everywhere, including macOS — and that is a correction.
 //
-// A default, not a rule: a Mac driven by a mouse is a different proposition from
-// one driven by a trackpad, and no build-time guess covers both.
+// This defaulted off on macOS for one revision, in answer to a report that
+// dragging over the encoder changed the function instead of moving around the
+// patch. The gesture in question turned out to be a two-finger trackpad swipe,
+// which is a SCROLL, not a drag: the wrong event was disabled, and the reported
+// one carried on doing exactly what was complained about. That is fixed where it
+// actually lives, in EncoderWidget::onHoverScroll.
 //
-// ARCH_MAC comes from Rack's arch.hpp, which plugin.hpp pulls in — it is not a
-// compiler flag, so this only works because that header is included above. If it
-// were not, this would quietly compile the wrong branch and look like success.
-#if defined ARCH_MAC
-constexpr bool kDragTurnsDefault = false;
-#else
+// Off on macOS is also no longer a safe default. Scroll now belongs to the view
+// unless Rack's own "scroll wheel knob adjustment" is enabled, so a drag is the
+// only way left to turn the encoder — and defaulting it off would leave the
+// module with no turn gesture at all.
+//
+// The setting stays, because a trackpad and a mouse are different propositions
+// and someone may still want the drag quiet. It is now a deliberate choice
+// rather than a guess made at build time.
 constexpr bool kDragTurnsDefault = true;
-#endif
 
 bool g_loaded = false;
 bool g_dragTurns = kDragTurnsDefault;
