@@ -59,7 +59,7 @@ a Rack user needs.
 | **CV A**, **CV B** | Summed into A and B |
 | **Sync** | Resets time to zero, and plucks the low-pass gate when it is on |
 | **Out 1**, **Out 2** | The two voices |
-| **ENV** | Envelope follower of Out 1, or a bytebeat LFO — see menu field 14 |
+| **CV Out** | Envelope follower of Out 1, or a bytebeat LFO — see menu field 14 |
 | **EOC** | Gate, derived from the rhythm of voice 1 |
 
 ### Driving the encoder with a mouse
