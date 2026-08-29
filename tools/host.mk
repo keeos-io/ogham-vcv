@@ -52,8 +52,9 @@ CONV   := $(BUILD)/converter_test$(EXE_SUFFIX)
 APPT   := $(BUILD)/app_test$(EXE_SUFFIX)
 MULTI  := $(BUILD)/multi_test$(EXE_SUFFIX)
 GOLDEN := $(BUILD)/golden_test$(EXE_SUFFIX)
+BOUND  := $(BUILD)/boundary_test$(EXE_SUFFIX)
 
-.PHONY: all check compile-only converter app multi golden tests clean
+.PHONY: all check compile-only converter app multi golden boundary tests clean
 
 all: $(RENDER)
 
@@ -96,8 +97,18 @@ $(GOLDEN): tests/parity/golden_test.cpp src/OghamApp.cpp src/OghamApp.hpp $(FW_S
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -Isrc -o $@ 		tests/parity/golden_test.cpp src/OghamApp.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 
+# The sample-rate boundary, by invariants that hold at every rate. The goldens
+# all run at 48 kHz, where the converter is bypassed, so they say nothing at all
+# about this.
+boundary: $(BOUND)
+	@./$(BOUND)
+
+$(BOUND): tests/parity/boundary_test.cpp src/OghamApp.cpp src/OghamApp.hpp src/RateConverter.hpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -Isrc -o $@ 		tests/parity/boundary_test.cpp src/OghamApp.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
+
 # Everything that can run without Rack.
-tests: converter app multi golden
+tests: converter app multi golden boundary
 
 $(RENDER): tests/parity/render.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 	@mkdir -p $(BUILD)

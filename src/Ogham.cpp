@@ -252,10 +252,19 @@ struct Ogham : Module {
             inputs[CLK_VOCT_INPUT].getVoltage(), 0.1f, 1.f);
 
         ogham::AppOutputs out;
+
+        // Hand the edges to the converter before asking how many core steps this
+        // sample runs, because the answer is sometimes none: at 96 kHz half the
+        // host samples take no core step and at 192 kHz three in four. Delivered
+        // straight into the loop below they were simply dropped on those
+        // samples — a Sync that resets the waveform, lost roughly half the time,
+        // at every rate above 48 kHz. Caught by tests/parity/boundary_test.cpp.
+        conv.latchEdges(sync, clock);
+
         const int steps = conv.advance();
         for (int i = 0; i < steps; i++) {
-            in.syncEdge   = sync  && (i == 0);
-            in.clockEdge  = clock && (i == 0);
+            in.syncEdge   = (i == 0) && conv.takeSync();
+            in.clockEdge  = (i == 0) && conv.takeClock();
             // Gestures are counts and the app accumulates them, so they must be
             // delivered exactly once however many core steps this sample runs.
             if (i > 0) {

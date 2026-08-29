@@ -72,7 +72,31 @@ public:
             for (int i = 0; i < 4; i++) history_[c][i] = 0.f;
         gate_ = false;
         primed_ = false;
+        pendSync_ = false;
+        pendClock_ = false;
     }
+
+    // Input edges, held until there is a core step to receive them.
+    //
+    // This is the converter's problem to solve rather than the caller's, because
+    // the converter is what creates it: advance() can legitimately return zero,
+    // and an edge arriving on such a host sample would otherwise be dropped
+    // where it stands. It is not a rare corner. At 96 kHz the increment is
+    // exactly 0.5, so the steps run 1, 0, 1, 0 and HALF of all host samples take
+    // no core step; at 192 kHz it is three in four. Sync suffers most, being a
+    // single-sample event that resets the waveform.
+    //
+    // Latch on every host sample; take on the first core step of the next sample
+    // that runs one. An edge is therefore delayed by at most one host sample and
+    // never lost, and two edges falling inside one core step collapse into one,
+    // which is right — the core cannot reset twice in a step it runs once.
+    void latchEdges(bool sync, bool clock) {
+        pendSync_  = pendSync_  || sync;
+        pendClock_ = pendClock_ || clock;
+    }
+
+    bool takeSync()  { const bool v = pendSync_;  pendSync_  = false; return v; }
+    bool takeClock() { const bool v = pendClock_; pendClock_ = false; return v; }
 
     // Advance one host sample and report how many core steps to run.
     //
@@ -141,6 +165,8 @@ private:
     uint64_t phase_     = 0;
     bool     bypass_    = true;
     bool     primed_    = false;
+    bool     pendSync_  = false;
+    bool     pendClock_ = false;
     bool     gate_      = false;
     float    history_[kChannels][4] = {};
 };
