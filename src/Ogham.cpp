@@ -40,7 +40,7 @@ namespace {
 // sit above it, which real modules do too — see ovcv-maw and the register.
 constexpr float kAudioVolts = 5.f;
 
-// ENV Out is DC-coupled on the module: the Daisy's DAC through a TL072 gain
+// CV Out is DC-coupled on the module: the Daisy's DAC through a TL072 gain
 // stage, 0–3.3 V scaled up to roughly 0–10 V.
 constexpr float kEnvVolts = 10.f;
 
@@ -187,7 +187,7 @@ struct Ogham : Module {
 
         configOutput(OUT1_OUTPUT, "Voice 1");
         configOutput(OUT2_OUTPUT, "Voice 2");
-        configOutput(ENV_OUTPUT, "Envelope / CV");
+        configOutput(ENV_OUTPUT, "CV Out");
         configOutput(EOC_OUTPUT, "End of cycle");
 
         ogham::shim::SetClockSource(&RackEngineMicros);

@@ -745,7 +745,7 @@ void OghamApp::ProcessSample(const AppInputs& in, AppOutputs& out) {
     const float* holdSamp2 = pipeline_.GetHoldSampleBuffer2();
 
     // The envelope follower and the BPM estimator read the FULL-scale audio, so
-    // ENV Out keeps its range. On hardware the jacks are attenuated after this
+    // CV Out keeps its range. On hardware the jacks are attenuated after this
     // point by AUDIO_OUT_LEVEL; here they are not — that constant compensates an
     // over-gained analog stage and is not part of the sound.
     cvOutput_.ProcessSample(l, r, clean[0], clean2[0],
