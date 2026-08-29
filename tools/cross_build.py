@@ -180,7 +180,11 @@ def do_release(image, jobs, clobber):
                  "  The binary would not be the tagged source. Commit or stash\n"
                  "  first.\n\n" + dirty)
 
-    print("Releasing mac-x64 for %s\n" % tag)
+    # Flushed, because everything below writes straight to the terminal from a
+    # subprocess. Buffered, this line arrives after the build output it
+    # introduces, and a release tool that reports events out of order is a
+    # release tool nobody trusts.
+    print("Releasing mac-x64 for %s\n" % tag, flush=True)
     rc = run_in_image(image, "make %s -j%d" % (TARGETS["mac-x64"], jobs),
                       stage_sources())
     shutil.rmtree(STAGE, ignore_errors=True)
