@@ -11,32 +11,6 @@ base, a bipolar lo-fi tone macro, a three-stage modulation chain, an internal
 low-pass gate, and a CV output that can be an envelope follower or a bytebeat
 LFO. This plugin is that module, in Rack.
 
-## How it relates to the firmware
-
-The firmware repository, [`keeos-io/ogham`](https://github.com/keeos-io/ogham),
-is the source of truth and this project never commits to it. Seven of its nine
-translation units are compiled into the plugin **unmodified**, as byte-identical
-copies in [`ogham-src/`](ogham-src/README.md):
-
-| Compiled verbatim | Not compiled |
-|---|---|
-| `formulas.cpp` | `ogham_main.cpp` — a `main()` with globals and ISRs; transcribed as `OghamApp` |
-| `bytebeat_engine.cpp` | `ogham_controls.cpp` — ADC smoothing and analog corrections a plugin does not want |
-| `bpm_clock.cpp` | |
-| `ogham_audio_pipeline.cpp` | `diag_pots.cpp` — a hardware diagnostic |
-| `ogham_cv_output.cpp` | |
-| `ogham_display.cpp` | |
-| `tm1637.cpp` — against dead pins | |
-
-So the voices here are not a reimplementation of the module's voices. They are
-the same code.
-
-Everywhere the plugin deliberately differs from the module —
-hardware calibration constants that become ideal values, the sample-rate
-boundary, persistence — is recorded in
-[`docs/firmware-differences.md`](docs/firmware-differences.md). A divergence
-that is not in that file is a bug.
-
 ## Using it
 
 The panel is the module's, at hardware size and hardware layout, so anything
@@ -88,8 +62,34 @@ The far-right dot means the tone macro is at its clean centre.
 ### What is not the same as the hardware
 
 Patches do not transfer: the module keeps its settings in its own flash format
-and nothing reads it out. Everything else that differs is listed in
-[`docs/firmware-differences.md`](docs/firmware-differences.md).
+and nothing reads it out. That is the only difference a player will meet; the
+rest are listed in the next section.
+
+## How it relates to the firmware
+
+The firmware repository, [`keeos-io/ogham`](https://github.com/keeos-io/ogham),
+is the source of truth and this project never commits to it. Seven of its nine
+translation units are compiled into the plugin **unmodified**, as byte-identical
+copies in [`ogham-src/`](ogham-src/README.md):
+
+| Compiled verbatim | Not compiled |
+|---|---|
+| `formulas.cpp` | `ogham_main.cpp` — a `main()` with globals and ISRs; transcribed as `OghamApp` |
+| `bytebeat_engine.cpp` | `ogham_controls.cpp` — ADC smoothing and analog corrections a plugin does not want |
+| `bpm_clock.cpp` | |
+| `ogham_audio_pipeline.cpp` | `diag_pots.cpp` — a hardware diagnostic |
+| `ogham_cv_output.cpp` | |
+| `ogham_display.cpp` | |
+| `tm1637.cpp` — against dead pins | |
+
+So the voices here are not a reimplementation of the module's voices. They are
+the same code.
+
+Everywhere the plugin deliberately differs from the module —
+hardware calibration constants that become ideal values, the sample-rate
+boundary, persistence — is recorded in
+[`docs/firmware-differences.md`](docs/firmware-differences.md). A divergence
+that is not in that file is a bug.
 
 ## Building
 
