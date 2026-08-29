@@ -5,7 +5,7 @@ All notable changes to Ogham for VCV Rack.
 The version's major number tracks Rack's, as the plugin library requires, so the
 first release is 2.0.0 rather than 1.0.0.
 
-## Unreleased
+## 2.0.0 — 2026-08-29
 
 ### Added
 
@@ -33,6 +33,19 @@ first release is 2.0.0 rather than 1.0.0.
   is resampled at the boundary, so the sound does not change with the host
   setting; at 48 kHz the conversion is bypassed entirely.
 - Right-click for the reference tone, a factory reset, and the CV output modes.
+
+### Verified
+
+- **51 golden renders** — every menu field, every FX stage in both variants,
+  every CV output mode and every way the time base can be driven — checked on
+  every push, so a change to the rendered audio cannot pass unnoticed.
+- **The 48 kHz boundary** at 44.1, 48, 88.2, 96 and 192 kHz, by invariants that
+  hold at every rate: core-step conservation over a minute, edge conservation,
+  finiteness, and level against the 48 kHz render.
+- **Eight instances at once**, each rendering exactly what it renders alone, at
+  about 0.35 % of a core each.
+- Windows, macOS (Intel and Apple Silicon) and Linux, built and the binaries
+  checked as genuine rather than assumed.
 
 ### Notes
 
