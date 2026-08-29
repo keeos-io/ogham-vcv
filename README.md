@@ -3,8 +3,6 @@
 A VCV Rack 2 plugin port of **Ogham**, the dual-voice bytebeat Eurorack module by
 [Keeos](https://keeos.io). Written by the maker of the module.
 
-Status: **in development.** Nothing is released yet.
-
 ## What this is
 
 Ogham is a hardware Eurorack module built on the Electro-Smith Daisy Seed: a
