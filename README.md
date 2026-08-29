@@ -11,6 +11,29 @@ base, a bipolar lo-fi tone macro, a three-stage modulation chain, an internal
 low-pass gate, and a CV output that can be an envelope follower or a bytebeat
 LFO. This plugin is that module, in Rack.
 
+## Install
+
+Once it is accepted into the [VCV Library](https://library.vcvrack.com/), Rack's
+own browser is the easiest route: subscribe, and Rack keeps it updated.
+
+Meanwhile, and for anyone who prefers not to, every release carries a package for
+each platform:
+
+**[Download from Releases](https://github.com/keeos-io/ogham-vcv/releases)** —
+`win-x64`, `mac-arm64`, `mac-x64`, `lin-x64`.
+
+Put the `.vcvplugin` file **directly** into Rack's plugin folder, not in a
+subfolder, and restart Rack — it unpacks the file itself on startup. **Help →
+Open user folder** in Rack finds the folder; the plugins live in
+`plugins-<platform>/` beside it.
+
+These packages are ad-hoc signed rather than notarised, so macOS may refuse the
+first launch. Right-click → Open, or:
+
+```sh
+xattr -dr com.apple.quarantine ~/Library/Application\ Support/Rack2/plugins-mac-arm64/Keeos
+```
+
 ## Using it
 
 The panel is the module's, at hardware size and hardware layout, so anything
