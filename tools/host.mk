@@ -51,8 +51,9 @@ RENDER := $(BUILD)/render-$(notdir $(CXX))$(EXE_SUFFIX)
 CONV   := $(BUILD)/converter_test$(EXE_SUFFIX)
 APPT   := $(BUILD)/app_test$(EXE_SUFFIX)
 MULTI  := $(BUILD)/multi_test$(EXE_SUFFIX)
+GOLDEN := $(BUILD)/golden_test$(EXE_SUFFIX)
 
-.PHONY: all check compile-only converter app multi tests clean
+.PHONY: all check compile-only converter app multi golden tests clean
 
 all: $(RENDER)
 
@@ -83,8 +84,20 @@ $(MULTI): tests/parity/multi_test.cpp src/OghamApp.cpp src/OghamApp.hpp $(FW_SRC
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -Isrc -o $@ 		tests/parity/multi_test.cpp src/OghamApp.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 
+# Fixed configurations rendered and checked against stored hashes. Every menu
+# field, every FX variant, every CV output mode, every way the time base can be
+# driven. This is what notices the sound changing.
+#
+#   build_host/golden_test --write     re-record, after an INTENDED change
+golden: $(GOLDEN)
+	@./$(GOLDEN)
+
+$(GOLDEN): tests/parity/golden_test.cpp src/OghamApp.cpp src/OghamApp.hpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -Isrc -o $@ 		tests/parity/golden_test.cpp src/OghamApp.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
+
 # Everything that can run without Rack.
-tests: converter app multi
+tests: converter app multi golden
 
 $(RENDER): tests/parity/render.cpp $(FW_SRC) $(DEP_SRC) $(SHIM_SRC)
 	@mkdir -p $(BUILD)

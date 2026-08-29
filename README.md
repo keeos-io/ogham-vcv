@@ -119,10 +119,35 @@ The firmware's DSP sources build and run without Rack at all:
 make -f tools/host.mk                # build the offline renderer with g++
 make -f tools/host.mk CXX=clang++    # or with clang
 make -f tools/host.mk check          # build both, render, compare byte for byte
+make -f tools/host.mk tests          # converter, app, multi-instance, goldens
 make -f tools/host.mk compile-only   # just: do the firmware sources still compile?
 
 build_host/render-g++ tests/parity/scripts/smoke.csv out.wav 10
 ```
+
+### Golden renders
+
+`tests/parity/golden/renders.txt` holds 51 configurations — every menu field in
+turn, every FX stage in both variants, every CV output mode, and each way the
+time base can be driven — rendered for three seconds and reduced to a hash, peak
+and RMS levels, and a 16-point RMS envelope per channel. This is what notices the
+sound changing.
+
+```sh
+make -f tools/host.mk golden        # check
+build_host/golden_test --write      # re-record, after an INTENDED change
+```
+
+The hash is exact; the levels are compared with a 1e-3 tolerance. Both are
+needed, because libm is not bit-identical between platforms: the same sources
+under Linux glibc render four of these cases differently in their last bits, the
+worst by 4e-4, while peak and RMS stay identical to six decimal places. A hash
+that moves while every level holds is reported as drift rather than failed. On
+the machine that recorded the file the hash is still exact, so nothing slips
+past.
+
+Re-recording is not a way to fix a failure. If the audio changed on purpose,
+`--write` and say so in the commit; if it did not, the diff is the bug report.
 
 The renderer drives the module's DSP from a scripted CSV and writes a 4-channel
 WAV — Out 1, Out 2, ENV, EOC — plus a hash of the audio, so a parity check is
