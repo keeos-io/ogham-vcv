@@ -45,6 +45,24 @@ python tools/cross_build.py win lin   # minutes
 Packages land in `dist-cross/`. `analyze` runs cppcheck over `src/`, and `shell`
 opens a prompt inside the image.
 
+### Completing a release
+
+CI builds `win-x64`, `lin-x64` and `mac-arm64` on a tag and attaches them to the
+draft release. `mac-x64` is not among them — its runner is `macos-13`, and that
+queue is slow enough to hold the whole run. So:
+
+```bash
+python tools/cross_build.py release
+```
+
+builds it and uploads it to the release for the current tag. It refuses if HEAD
+is not at a tag or the working tree is dirty, because an asset that is not the
+tagged source is worse than a missing one. `--clobber` replaces an asset already
+attached.
+
+This exists because the step was manual for exactly one release, and a manual
+step in a release is one that gets skipped on the third.
+
 Two properties worth knowing. Because it contains no Apple SDK, **this image is
 redistributable** — it can be pushed to a registry and pulled by CI, which the
 full four-target image cannot. And because it builds against an

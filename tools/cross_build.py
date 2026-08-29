@@ -11,6 +11,9 @@
 #   python tools/cross_build.py win lin   build those targets
 #   python tools/cross_build.py mac       both macOS targets, if the image has them
 #   python tools/cross_build.py all       everything the image can build
+#   python tools/cross_build.py release   build mac-x64 and attach it to the
+#                                         release for the current tag — the one
+#                                         platform CI does not build
 #   python tools/cross_build.py analyze   cppcheck over src/
 #   python tools/cross_build.py shell     a prompt inside the image
 #
@@ -138,12 +141,79 @@ def run_in_image(image, command, source=None):
         image, "/bin/bash", "-c", command).returncode
 
 
+def git(*args):
+    r = subprocess.run(["git"] + list(args), cwd=ROOT,
+                       capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def do_release(image, jobs, clobber):
+    """Attach the one platform CI cannot build to the release for this tag.
+
+    CI builds win-x64, lin-x64 and mac-arm64 and attaches them to the draft
+    release automatically. mac-x64 is missing from that list because its runner
+    is macos-13 — Intel hardware Apple no longer sells and GitHub is winding
+    down, whose queue ran past twenty minutes and held the whole run's logs while
+    it waited. Building it here takes about four seconds.
+
+    Left as a manual step, this is exactly the kind of thing that gets forgotten
+    on the third release and ships three platforms out of four.
+    """
+    if image != IMAGE_ALL:
+        sys.exit("cross_build: %s cannot build for macOS, so it cannot complete\n"
+                 "  a release. See tools/toolchain/sdk/README.md." % image)
+
+    if not shutil.which("gh"):
+        sys.exit("cross_build: the GitHub CLI (gh) is not on PATH; it is what\n"
+                 "  uploads the asset. Install it, or upload by hand from\n"
+                 "  dist-cross/ after `cross_build.py mac-x64`.")
+
+    tag = git("describe", "--tags", "--exact-match", "HEAD")
+    if not tag:
+        sys.exit("cross_build: HEAD is not at a tag.\n"
+                 "  A release asset has to be built from the commit it claims to\n"
+                 "  be, so check out the tag first.")
+
+    dirty = git("status", "--porcelain")
+    if dirty:
+        sys.exit("cross_build: the working tree has uncommitted changes.\n"
+                 "  The binary would not be the tagged source. Commit or stash\n"
+                 "  first.\n\n" + dirty)
+
+    print("Releasing mac-x64 for %s\n" % tag)
+    rc = run_in_image(image, "make %s -j%d" % (TARGETS["mac-x64"], jobs),
+                      stage_sources())
+    shutil.rmtree(STAGE, ignore_errors=True)
+    if rc != 0:
+        sys.exit("cross_build: the mac-x64 build failed (exit %d)" % rc)
+
+    assets = glob.glob(os.path.join(OUT, "*mac-x64.vcvplugin"))
+    if len(assets) != 1:
+        sys.exit("cross_build: expected one mac-x64 package in dist-cross/, "
+                 "found %d" % len(assets))
+
+    cmd = ["gh", "release", "upload", tag, assets[0]]
+    if clobber:
+        cmd.append("--clobber")
+    r = subprocess.run(cmd, cwd=ROOT)
+    if r.returncode != 0:
+        sys.exit("cross_build: upload failed. If the asset is already attached, "
+                 "pass --clobber to replace it.")
+
+    print("\nAttached %s to %s." % (os.path.basename(assets[0]), tag))
+    print("The other three come from CI. Check all four are present:")
+    print("  gh release view %s" % tag)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument("targets", nargs="*", default=[],
                     help="image | win | lin | mac | mac-x64 | mac-arm64 | "
-                         "all | analyze | shell")
+                         "all | release | analyze | shell")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
+    ap.add_argument("--clobber", action="store_true",
+                    help="release: replace the asset if it is already attached")
     args = ap.parse_args()
     todo = list(args.targets) or ["all"]
 
@@ -161,6 +231,8 @@ def main():
                  "  Run: python tools/cross_build.py image")
     has_mac = image == IMAGE_ALL
 
+    if "release" in todo:
+        return do_release(image, args.jobs, args.clobber)
     if "shell" in todo:
         return run_in_image(image, "exec bash -i")
     if "analyze" in todo:
