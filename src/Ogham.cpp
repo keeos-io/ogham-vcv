@@ -125,18 +125,23 @@ struct Ogham : Module {
     };
     enum LightId { LIGHTS_LEN };
 
-    // Value-initialised, and that brace is load-bearing.
+    // Value-initialised. Belt as well as braces, since firmware 1.17.
     //
-    // BpmClock has four arrays with no default initialiser that Init() never
-    // touches — fftBuffer_, fluxLin_, corr_ and bpmHist_. On the module that
-    // costs nothing: the object is a file-scope static, so the loader zeroes it.
-    // Here it is a member of a heap-allocated Module, so `new Ogham` would
-    // default-initialise it and leave those arrays holding whatever was in that
-    // memory. bpmHist_ is the estimator's agreement history, so a fresh module
-    // could lock to a tempo derived from nothing at all, differently each time.
+    // This brace used to be load-bearing. BpmClock had four arrays with no
+    // default initialiser that Init() never touches — fftBuffer_, fluxLin_,
+    // corr_ and bpmHist_ — which cost nothing on the module, where the object
+    // is a file-scope static the loader zeroes, and mattered here, where it is
+    // a member of a heap-allocated Module and those arrays held whatever was in
+    // that memory. bpmHist_ is the estimator's agreement history, so a fresh
+    // module could lock to a tempo derived from nothing, differently each time.
+    // The multi-instance test caught it as instances appearing to share state —
+    // they were not; each was starting from different rubbish.
     //
-    // Found by the multi-instance test, which caught it as instances appearing
-    // to share state — they were not; each was starting from different rubbish.
+    // Fixed upstream instead: firmware 1.17 gives every BpmClock member a
+    // default initialiser, so the class is correct wherever it is constructed.
+    // The brace stays because it costs nothing and the guarantee it was
+    // providing could never be enforced from this side — it needs "the default
+    // constructor is not user-provided", and C++11 has no trait for that.
     ogham::OghamApp      app{};
     ogham::RateConverter conv;
     dsp::SchmittTrigger  syncTrigger;

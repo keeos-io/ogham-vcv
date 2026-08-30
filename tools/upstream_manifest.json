@@ -1,8 +1,8 @@
 {
-  "commit": "4dbd4c5ecdbdbd315f9859bb1f674b20f6fbdfbd",
+  "commit": "452d8753b5429840dd81587a3be16a8c3dcc5f8f",
   "files": {
     "bpm_clock.cpp": "dd15c4f035a3f3056e047e5188965febad740b60c332b24c675a835346e9e527",
-    "bpm_clock.h": "763e10c86710f7d640044761093e7d4901ccfd59c43bff48d073a70bee2271cf",
+    "bpm_clock.h": "dd42edfab9768e72b243cecbd90b6219e1b626d8883d00b51c14356ccf472c1a",
     "bytebeat_engine.cpp": "0ef5f7b478dce13bfda2f3ca75ff632339d5f6d0dfe9da426b6d849b4325aebf",
     "bytebeat_engine.h": "b47d96b66b23fd480562b06e21dbdd99572de7066c757d0c04e2770291c7a3a3",
     "formulas.cpp": "beffb32b699133dd85dba9a5600fafca40d862d5436bb011c9d064070208bbcf",

@@ -83,6 +83,29 @@ private:
     static constexpr float TEMPO_MIN = 40.0f;
     static constexpr float TEMPO_MAX = 200.0f;
 
+    // Every member carries a default initialiser.
+    //
+    // The class follows the libDaisy convention of Init() rather than a
+    // constructor, and Init() does not touch fftBuffer_, fluxLin_, corr_ or
+    // bpmHist_ -- they are written before they are read in normal operation.
+    // On the module that is harmless: the instance is a file-scope static, so
+    // the loader zeroes it. Off the module it is not. The VCV Rack port makes
+    // it a member of a heap-allocated Module, where those four arrays start as
+    // whatever was in that memory, and bpmHist_ is the estimator's agreement
+    // history -- so a fresh instance could lock to a tempo derived from
+    // nothing, differently each time. It was found there by a multi-instance
+    // test that looked, wrongly, like instances sharing state.
+    //
+    // Initialising here rather than at the call site makes the class correct
+    // wherever it is constructed instead of correct-if-the-caller-remembers,
+    // and there is no way to enforce the caller-side version at compile time:
+    // the guarantee needs "the default constructor is not user-provided", and
+    // C++11 has no trait for that.
+    //
+    // Costs nothing on the module. These are all constant expressions, so a
+    // file-scope static is still constant-initialised into .bss -- verified by
+    // the firmware's text/data/bss being byte-identical across this change.
+
     // Audio ring buffer (ISR writes, main reads).
     //
     // The main loop reads the FFT_SIZE samples behind frameWritePos_ while the
@@ -90,59 +113,59 @@ private:
     // is (AUDIO_BUF_SIZE - FFT_SIZE) samples — 74ms at 4096/512. The main loop
     // blocks for ~9ms on each TM1637 write, so the old 1024-sample buffer left
     // only 16ms and could tear a frame.
-    float audioBuffer_[AUDIO_BUF_SIZE];
-    volatile int audioWritePos_;
-    volatile int frameWritePos_;  // Snapshot at decimation boundary
+    float audioBuffer_[AUDIO_BUF_SIZE] = {};
+    volatile int audioWritePos_ = 0;
+    volatile int frameWritePos_ = 0;  // Snapshot at decimation boundary
 
     // Decimation
-    uint32_t decimCounter_;
-    volatile bool frameReady_;
+    uint32_t decimCounter_ = 0;
+    volatile bool frameReady_ = false;
 
     // Analysis window, built once (periodic Hann, the correct one for overlap
     // analysis). Computing this with cosf per sample per frame cost 25,600
     // transcendental calls a second for a constant.
-    float window_[FFT_SIZE];
+    float window_[FFT_SIZE] = {};
 
     // FFT working buffer: FFT_SIZE complex values, interleaved [re, im, ...]
-    float fftBuffer_[FFT_SIZE * 2];
+    float fftBuffer_[FFT_SIZE * 2] = {};
 
     // Magnitude spectra for spectral flux
-    float curMag_[NUM_MAG_BINS];
-    float prevMag_[NUM_MAG_BINS];
-    bool hasPrevMag_;
+    float curMag_[NUM_MAG_BINS] = {};
+    float prevMag_[NUM_MAG_BINS] = {};
+    bool hasPrevMag_ = false;
 
     // Spectral flux ring buffer
-    float fluxBuffer_[FLUX_BUF_SIZE];
-    int fluxWritePos_;
+    float fluxBuffer_[FLUX_BUF_SIZE] = {};
+    int fluxWritePos_ = 0;
 
     // Flux unwrapped into linear order, mean already removed, so the
     // correlation's inner loop is a plain dot product. Indexing the ring
     // directly cost two hardware divides per iteration — about 113,000 UDIV per
     // estimate for work whose arithmetic is one multiply-accumulate.
-    float fluxLin_[FLUX_BUF_SIZE];
-    float corr_[MAX_LAGS];
+    float fluxLin_[FLUX_BUF_SIZE] = {};
+    float corr_[MAX_LAGS] = {};
 
     // Estimation state
-    bool estimatePending_;
-    volatile int freshSamples_;
-    int lastRunSamples_;
+    bool estimatePending_ = false;
+    volatile int freshSamples_ = 0;
+    int lastRunSamples_ = 0;
 
     // Recent estimates, so a lock is earned by agreement rather than won by
     // whichever estimate happened to come first.
-    float bpmHist_[BPM_HIST];
-    int   bpmHistCount_;
-    float lastPeak_;
+    float bpmHist_[BPM_HIST] = {};
+    int   bpmHistCount_ = 0;
+    float lastPeak_ = 0.0f;
 
     // BPM result
-    float baseBpm_;
-    float bpm_;
-    bool locked_;
-    float confidence_;
+    float baseBpm_ = 0.0f;
+    float bpm_ = 0.0f;
+    bool locked_ = false;
+    float confidence_ = 0.0f;
 
     // Clock generator (free-running)
-    volatile uint32_t period_;
-    uint32_t clockCounter_;
-    bool clockHigh_;
+    volatile uint32_t period_ = 0;
+    uint32_t clockCounter_ = 0;
+    bool clockHigh_ = false;
 
     void ProcessFrame();
     void RunEstimate(float rate);
