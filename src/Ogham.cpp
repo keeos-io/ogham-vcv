@@ -315,15 +315,28 @@ struct Ogham : Module {
         json_t* j = json_object();
         json_object_set_new(j, "enabled", json_boolean(fx.enabled != 0));
         json_object_set_new(j, "parallel", json_boolean(fx.parallel != 0));
+        // An array of pointers to the members, rather than a pointer to the
+        // first one indexed onward.
+        //
+        // The four fields per stage are separate struct members, not an array,
+        // so `&fx.chorusLevel` then `p[1]` is undefined behaviour however the
+        // bytes happen to be laid out — pointer arithmetic is only defined
+        // within one object. Adjacent uint8_t members make it work in practice,
+        // which is exactly what makes it worth writing down.
+        // Reported as clang-analyzer-security.ArrayBound, keeos-io/ogham-vcv#1.
+        const uint8_t* const fxFields[3][4] = {
+            {&fx.chorusLevel,  &fx.chorusType,  &fx.chorusP1,  &fx.chorusP2},
+            {&fx.flangerLevel, &fx.flangerType, &fx.flangerP1, &fx.flangerP2},
+            {&fx.phaserLevel,  &fx.phaserType,  &fx.phaserP1,  &fx.phaserP2},
+        };
         for (int stage = 0; stage < 3; stage++) {
             static const char* names[3] = {"chorus", "flanger", "phaser"};
-            const uint8_t* p = (stage == 0) ? &fx.chorusLevel
-                             : (stage == 1) ? &fx.flangerLevel : &fx.phaserLevel;
+            const uint8_t* const* p = fxFields[stage];
             json_t* s = json_object();
-            json_object_set_new(s, "level", json_integer(p[0]));
-            json_object_set_new(s, "type",  json_integer(p[1]));
-            json_object_set_new(s, "p1",    json_integer(p[2]));
-            json_object_set_new(s, "p2",    json_integer(p[3]));
+            json_object_set_new(s, "level", json_integer(*p[0]));
+            json_object_set_new(s, "type",  json_integer(*p[1]));
+            json_object_set_new(s, "p1",    json_integer(*p[2]));
+            json_object_set_new(s, "p2",    json_integer(*p[3]));
             json_object_set_new(j, names[stage], s);
         }
         json_object_set_new(root, "fx", j);
@@ -373,16 +386,22 @@ struct Ogham : Module {
         json_t* j = json_object_get(root, "fx");
         fx.enabled  = flag(j, "enabled", true) ? 1 : 0;
         fx.parallel = flag(j, "parallel", false) ? 1 : 0;
+        // See the note in dataToJson: pointers to the members, not arithmetic
+        // off the first one.
+        uint8_t* const fxFields[3][4] = {
+            {&fx.chorusLevel,  &fx.chorusType,  &fx.chorusP1,  &fx.chorusP2},
+            {&fx.flangerLevel, &fx.flangerType, &fx.flangerP1, &fx.flangerP2},
+            {&fx.phaserLevel,  &fx.phaserType,  &fx.phaserP1,  &fx.phaserP2},
+        };
         for (int stage = 0; stage < 3; stage++) {
             static const char* names[3] = {"chorus", "flanger", "phaser"};
-            uint8_t* p = (stage == 0) ? &fx.chorusLevel
-                       : (stage == 1) ? &fx.flangerLevel : &fx.phaserLevel;
             json_t* sj = j ? json_object_get(j, names[stage]) : nullptr;
             if (!sj) continue;
-            p[0] = (uint8_t)clamp(num(sj, "level", p[0]), 0, 99);
-            p[1] = (uint8_t)clamp(num(sj, "type",  p[1]), 0, FX_TYPE_MAX);
-            p[2] = (uint8_t)clamp(num(sj, "p1",    p[2]), 0, 99);
-            p[3] = (uint8_t)clamp(num(sj, "p2",    p[3]), 0, 99);
+            uint8_t* const* p = fxFields[stage];
+            *p[0] = (uint8_t)clamp(num(sj, "level", *p[0]), 0, 99);
+            *p[1] = (uint8_t)clamp(num(sj, "type",  *p[1]), 0, FX_TYPE_MAX);
+            *p[2] = (uint8_t)clamp(num(sj, "p1",    *p[2]), 0, 99);
+            *p[3] = (uint8_t)clamp(num(sj, "p2",    *p[3]), 0, 99);
         }
 
         json_t* cv = json_object_get(root, "cvOut");
