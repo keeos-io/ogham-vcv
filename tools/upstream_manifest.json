@@ -1,12 +1,12 @@
 {
-  "commit": "452d8753b5429840dd81587a3be16a8c3dcc5f8f",
+  "commit": "055470374f6887bfa6633e6a2b736054f9235594",
   "files": {
     "bpm_clock.cpp": "dd15c4f035a3f3056e047e5188965febad740b60c332b24c675a835346e9e527",
     "bpm_clock.h": "dd42edfab9768e72b243cecbd90b6219e1b626d8883d00b51c14356ccf472c1a",
     "bytebeat_engine.cpp": "0ef5f7b478dce13bfda2f3ca75ff632339d5f6d0dfe9da426b6d849b4325aebf",
     "bytebeat_engine.h": "b47d96b66b23fd480562b06e21dbdd99572de7066c757d0c04e2770291c7a3a3",
     "formulas.cpp": "beffb32b699133dd85dba9a5600fafca40d862d5436bb011c9d064070208bbcf",
-    "formulas.h": "4d2e477baaa3670ff6e9fc43dc9590a5e8a22336098caac949f184ce6c54cf89",
+    "formulas.h": "43f357ee02bf8a3d3b0e3af9721101e8ec44be673afcff0b87002133d0df68db",
     "ogham_audio_pipeline.cpp": "887291216a3a4fdb686919129d828c99aefe43af98d1a55c339f3dee9e514939",
     "ogham_audio_pipeline.h": "9da41fac68da1c276428a77a51d4944ffcee977f393a1c032c47bd56d2e346e3",
     "ogham_controls.cpp": "a6569eaff23727b1eb6cd4c7cb4e0117188c175f3e72e3dbb27c68c7e65a8186",
