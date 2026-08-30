@@ -124,15 +124,6 @@ jobs:
           unzip -q rack-sdk.zip
           echo "RACK_DIR=$PWD/Rack-SDK" >> "$GITHUB_ENV"
 
-      - name: Build
-        if: runner.os != 'Windows'
-        run: make -j$(getconf _NPROCESSORS_ONLN) dist
-
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: make -j$(nproc) dist
-
       # clang-analyzer, on the one leg that has the Rack SDK.
       #
       # It catches a class cppcheck does not -- notably pointer arithmetic that
@@ -151,16 +142,28 @@ jobs:
       #    analysing it. -Wsuggest-override goes the same way.
       #  - --warnings-as-errors, so a finding fails the build rather than
       #    scrolling past in a green run.
+      #
+      # Before Build rather than after: bear has to observe a compilation to
+      # record it, so it needs the build that Build would otherwise do. Run
+      # here, `make dist` then has an up-to-date plugin and only packages it.
       - name: Static analysis (clang-analyzer)
         if: matrix.name == 'lin-x64'
         run: |
           wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh && sudo /tmp/llvm.sh 21
           sudo apt-get install -y --no-install-recommends clang-tidy-21 bear jq
-          make clean
           bear -- make -j$(getconf _NPROCESSORS_ONLN)
           jq 'map(.arguments |= map(select(. != "-fno-gnu-unique" and . != "-Wsuggest-override")))'             compile_commands.json > cc.tmp && mv cc.tmp compile_commands.json
           clang-tidy-21 -p .             --checks='-*,clang-analyzer-*'             --header-filter='^(src|src/shim)/'             --warnings-as-errors='*'             src/*.cpp src/shim/*.cpp
+
+      - name: Build
+        if: runner.os != 'Windows'
+        run: make -j$(getconf _NPROCESSORS_ONLN) dist
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: make -j$(nproc) dist
 
       - uses: actions/upload-artifact@v4
         with:
