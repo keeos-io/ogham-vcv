@@ -27,10 +27,19 @@
 
 #pragma once
 
-// Sentinel: the plugin asserts this is defined, so that a real libDaisy header
-// arriving on the include path ahead of src/shim fails the build loudly instead
-// of quietly compiling the DSP against hardware definitions.
-#define OGHAM_SHIM_DAISY_SEED 1
+// Sentinel: the plugin asserts this, so that a real libDaisy header arriving on
+// the include path ahead of src/shim fails the build loudly instead of quietly
+// compiling the DSP against hardware definitions.
+//
+// A constant rather than a macro, because the check has to be a static_assert
+// rather than an #error. cppcheck examines the configuration in which the macro
+// is undefined and reports the #error as a finding, and the only way to resolve
+// that is to pass this project's include paths -- which the VCV Library's
+// analysis does not do, and should not have to.
+//
+// In namespace daisy so that the failure names the symbol: a real libDaisy
+// header provides the namespace but not this.
+namespace daisy { constexpr bool kOghamShimDaisySeed = true; }
 
 #include <cstdint>
 

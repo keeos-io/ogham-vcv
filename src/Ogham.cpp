@@ -20,9 +20,12 @@
 // The shim must be the daisy_seed.h that was found. If a real libDaisy ever
 // lands on the include path ahead of src/shim, the plugin would compile against
 // hardware headers and fail in ways that take a day to understand.
-#ifndef OGHAM_SHIM_DAISY_SEED
-#error "daisy_seed.h did not resolve to src/shim — check the include order"
-#endif
+//
+// Only the shim declares this constant, so the wrong header not providing it is
+// the check. The message below shows if it is present and false; if the wrong
+// header won, the compiler reports no member named kOghamShimDaisySeed.
+static_assert(daisy::kOghamShimDaisySeed,
+              "daisy_seed.h did not resolve to src/shim — check the include order");
 
 #include "OghamApp.hpp"
 #include "widgets.hpp"
