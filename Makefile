@@ -32,7 +32,11 @@ FW  := ogham-src
 # `make cleandep` is `rm -rf dep`, which the plugin toolchain runs before every
 # platform build. dep/ is scratch space for dependencies a build downloads and
 # can recreate; these four files are checked-in source and have to survive.
-DEP := daisysp-src
+#
+# Under thirdparty/ because the Rack library's static analysis excludes that
+# name automatically, which is the right outcome: this is unmodified
+# third-party source and its warnings are not ours to fix. keeos-io/ogham-vcv#1.
+DEP := thirdparty/daisysp
 
 # src/shim first: it is where `daisy_seed.h` is found, and no real libDaisy may
 # be reachable. src/Ogham.cpp fails to compile if a different one wins.

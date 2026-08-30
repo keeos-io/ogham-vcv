@@ -24,7 +24,7 @@
 CXX      ?= g++
 BUILD    ?= build_host
 FW       := ogham-src
-DEP      := daisysp-src
+DEP      := thirdparty/daisysp
 
 INCLUDES := -Isrc/shim -I$(FW) -I$(DEP) -I$(DEP)/Utility
 

@@ -80,7 +80,7 @@ The toolchain runs `make cleandep` before every platform build, and Rack's
 the first cross build would have deleted four checked-in source files and then
 failed on the missing headers — a confusing way to learn that `dep/` is Rack's
 scratch space for dependencies a build can re-fetch, not a place for source that
-must survive. It now lives in `daisysp-src/`, alongside `ogham-src/`.
+must survive. It now lives in `thirdparty/daisysp/`, alongside `ogham-src/`.
 
 ### What it produced
 
