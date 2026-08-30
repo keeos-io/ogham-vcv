@@ -125,23 +125,8 @@ struct Ogham : Module {
     };
     enum LightId { LIGHTS_LEN };
 
-    // Value-initialised. Belt as well as braces, since firmware 1.17.
-    //
-    // This brace used to be load-bearing. BpmClock had four arrays with no
-    // default initialiser that Init() never touches — fftBuffer_, fluxLin_,
-    // corr_ and bpmHist_ — which cost nothing on the module, where the object
-    // is a file-scope static the loader zeroes, and mattered here, where it is
-    // a member of a heap-allocated Module and those arrays held whatever was in
-    // that memory. bpmHist_ is the estimator's agreement history, so a fresh
-    // module could lock to a tempo derived from nothing, differently each time.
-    // The multi-instance test caught it as instances appearing to share state —
-    // they were not; each was starting from different rubbish.
-    //
-    // Fixed upstream instead: firmware 1.17 gives every BpmClock member a
-    // default initialiser, so the class is correct wherever it is constructed.
-    // The brace stays because it costs nothing and the guarantee it was
-    // providing could never be enforced from this side — it needs "the default
-    // constructor is not user-provided", and C++11 has no trait for that.
+    // Value-initialised: a Module is heap-allocated, and the firmware sources
+    // it contains initialise through Init() rather than constructors.
     ogham::OghamApp      app{};
     ogham::RateConverter conv;
     dsp::SchmittTrigger  syncTrigger;
@@ -321,14 +306,10 @@ struct Ogham : Module {
         json_object_set_new(j, "enabled", json_boolean(fx.enabled != 0));
         json_object_set_new(j, "parallel", json_boolean(fx.parallel != 0));
         // An array of pointers to the members, rather than a pointer to the
-        // first one indexed onward.
-        //
-        // The four fields per stage are separate struct members, not an array,
-        // so `&fx.chorusLevel` then `p[1]` is undefined behaviour however the
-        // bytes happen to be laid out — pointer arithmetic is only defined
-        // within one object. Adjacent uint8_t members make it work in practice,
-        // which is exactly what makes it worth writing down.
-        // Reported as clang-analyzer-security.ArrayBound, keeos-io/ogham-vcv#1.
+        // first one indexed onward. The four fields per stage are separate
+        // struct members, not an array, so `&fx.chorusLevel` then `p[1]` is
+        // undefined behaviour however the bytes happen to be laid out —
+        // pointer arithmetic is only defined within one object.
         const uint8_t* const fxFields[3][4] = {
             {&fx.chorusLevel,  &fx.chorusType,  &fx.chorusP1,  &fx.chorusP2},
             {&fx.flangerLevel, &fx.flangerType, &fx.flangerP1, &fx.flangerP2},

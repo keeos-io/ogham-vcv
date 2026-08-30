@@ -128,9 +128,8 @@ inline float MapKnobToRate(float knob) {
     return powf(2.0f, 12.0f * knob - 6.0f);
 }
 
-// Branch-only rather than a sorting network. The network's last two swaps
-// write values nothing reads, since only the median is returned — correct, but
-// clang-analyzer-deadcode.DeadStores is right to say so (keeos-io/ogham-vcv#1).
+// Branch-only rather than a sorting network: only the median is returned, so a
+// network's last two swaps would write values nothing reads.
 inline uint32_t Median3(uint32_t a, uint32_t b, uint32_t c) {
     return a > b ? (b > c ? b : (a > c ? c : a))
                  : (a > c ? a : (b > c ? c : b));

@@ -341,11 +341,10 @@ struct EncoderWidget : Widget {
         // wheels adjust knobs. That setting is off by default, and it exists to
         // settle exactly this conflict: without it, scroll belongs to the view.
         //
-        // This widget used to take the wheel unconditionally, which broke
-        // panning over the encoder on every platform, and was unmissable on a
-        // Mac — a two-finger trackpad gesture IS a scroll, so the natural way to
-        // move around a patch turned the function instead whenever the pointer
-        // happened to be over the knob.
+        // Taking the wheel unconditionally would break panning over the
+        // encoder, and worst on a Mac: a two-finger trackpad gesture IS a
+        // scroll, so the natural way to move around a patch would turn the
+        // function instead whenever the pointer sat over the knob.
         //
         // Not consuming the event is the whole point: unconsumed, it travels on
         // and the view scrolls, exactly as it does over any other module.

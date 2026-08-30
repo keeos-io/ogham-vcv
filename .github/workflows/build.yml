@@ -135,27 +135,22 @@ jobs:
 
       # clang-analyzer, on the one leg that has the Rack SDK.
       #
-      # cppcheck in the tests job does not catch this class. The ArrayBound bug
-      # in keeos-io/ogham-vcv#1 -- indexing off a pointer to one struct member
-      # into the next -- was found by clang-analyzer and missed by cppcheck, and
-      # it was in src/Ogham.cpp, which host.mk cannot build because it needs
+      # It catches a class cppcheck does not -- notably pointer arithmetic that
+      # walks off the end of one struct member into the next -- and it needs
+      # src/Ogham.cpp, which host.mk cannot build because that file requires
       # Rack's headers. So it runs here rather than alongside cppcheck.
       #
-      # Three details, each of which made this step silently useless in testing
-      # before it was pinned down:
+      # Three details that are not optional:
       #
       #  - LLVM 21, not the distro's. security.ArrayBound does not exist in
-      #    clang-tidy 18, which is what Ubuntu 24.04 ships -- not as an alpha
-      #    checker either. With 18 this step passes on the known-bad code.
+      #    clang-tidy 18, which is what Ubuntu 24.04 ships, and not as an alpha
+      #    checker either. With 18 the step passes on code it should reject.
       #  - -fno-gnu-unique is stripped from compile_commands.json. It is a GCC
-      #    flag in Rack's own compile.mk, clang rejects it as an unknown
-      #    argument, and clang-tidy then fails every file with a compiler error
-      #    instead of analysing it. -Wsuggest-override goes for the same reason.
+      #    flag in Rack's own compile.mk; clang rejects it as an unknown
+      #    argument and then fails every file with a compiler error rather than
+      #    analysing it. -Wsuggest-override goes the same way.
       #  - --warnings-as-errors, so a finding fails the build rather than
       #    scrolling past in a green run.
-      #
-      # Verified by restoring the pre-fix Ogham.cpp: exit 1 with the same three
-      # findings the Library reported, exit 0 once fixed.
       - name: Static analysis (clang-analyzer)
         if: matrix.name == 'lin-x64'
         run: |

@@ -37,10 +37,10 @@ inline int32_t shr(int32_t val, int32_t shift) {
 
 // Shifting a negative value left is undefined before C++20, and this does it
 // constantly by design: JavaScript's << is defined on a wrapped int32, and
-// reproducing that is the entire purpose of these helpers. The well-defined
-// spelling -- through uint32_t and back -- was tried and produces a different
-// binary, so it is not a free swap on a synth whose formulas are the sound. Left
-// as it is deliberately, and suppressed rather than left to be rediscovered.
+// reproducing that is the entire purpose of these helpers. Going through
+// uint32_t and back is the well-defined spelling of the same operation, but it
+// compiles to a different binary — not a free swap on a synth whose formulas
+// are the sound.
 inline int32_t shl(int32_t val, int32_t shift) {
     // cppcheck-suppress shiftNegativeLHS
     return val << (shift & 31);

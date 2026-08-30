@@ -35,7 +35,7 @@ FW  := ogham-src
 #
 # Under thirdparty/ because the Rack library's static analysis excludes that
 # name automatically, which is the right outcome: this is unmodified
-# third-party source and its warnings are not ours to fix. keeos-io/ogham-vcv#1.
+# third-party source and its warnings are not ours to fix.
 DEP := thirdparty/daisysp
 
 # src/shim first: it is where `daisy_seed.h` is found, and no real libDaisy may

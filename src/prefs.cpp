@@ -18,23 +18,15 @@ namespace {
 const char* kDir  = "Keeos";
 const char* kFile = "Keeos/settings.json";
 
-// On, everywhere, including macOS — and that is a correction.
+// On, everywhere, including macOS.
 //
-// This defaulted off on macOS for one revision, in answer to a report that
-// dragging over the encoder changed the function instead of moving around the
-// patch. The gesture in question turned out to be a two-finger trackpad swipe,
-// which is a SCROLL, not a drag: the wrong event was disabled, and the reported
-// one carried on doing exactly what was complained about. That is fixed where it
-// actually lives, in EncoderWidget::onHoverScroll.
-//
-// Off on macOS is also no longer a safe default. Scroll now belongs to the view
-// unless Rack's own "scroll wheel knob adjustment" is enabled, so a drag is the
-// only way left to turn the encoder — and defaulting it off would leave the
-// module with no turn gesture at all.
+// Scroll belongs to the view unless Rack's own "scroll wheel knob adjustment"
+// is enabled — see EncoderWidget::onHoverScroll — so a drag is the only way
+// left to turn the encoder, and defaulting this off would leave the module with
+// no turn gesture at all.
 //
 // The setting stays, because a trackpad and a mouse are different propositions
-// and someone may still want the drag quiet. It is now a deliberate choice
-// rather than a guess made at build time.
+// and someone may still want the drag quiet.
 constexpr bool kDragTurnsDefault = true;
 
 bool g_loaded = false;
