@@ -14,7 +14,7 @@
 #   python tools/cross_build.py release   build mac-x64 and attach it to the
 #                                         release for the current tag — the one
 #                                         platform CI does not build
-#   python tools/cross_build.py analyze   cppcheck over src/
+#   python tools/cross_build.py analyze   cppcheck over src/ and ogham-src/
 #   python tools/cross_build.py shell     a prompt inside the image
 #
 # Packages land in dist-cross/.
@@ -247,7 +247,7 @@ def main():
         # the checks worth having.
         return run_in_image(image, (
             "export PATH=/home/build/rack-plugin-toolchain/local/cppcheck/bin:"
-            "$PATH && cd /home/build/plugin-src && cppcheck src/ --std=c++11 "
+            "$PATH && cd /home/build/plugin-src && cppcheck src/ ogham-src/ --std=c++11 "
             "-j%d --check-level=exhaustive --error-exitcode=1 "
             "--enable=warning,performance,portability "
             "--suppress=missingInclude --inline-suppr" % args.jobs))

@@ -42,7 +42,7 @@ python tools/cross_build.py image     # once, about an hour
 python tools/cross_build.py win lin   # minutes
 ```
 
-Packages land in `dist-cross/`. `analyze` runs cppcheck over `src/`, and `shell`
+Packages land in `dist-cross/`. `analyze` runs cppcheck over `src/` and `ogham-src/`, and `shell`
 opens a prompt inside the image.
 
 ### Completing a release
