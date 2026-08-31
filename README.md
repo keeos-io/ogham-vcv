@@ -13,11 +13,11 @@ LFO. This plugin is that module, in Rack.
 
 ## Install
 
-Once it is accepted into the [VCV Library](https://library.vcvrack.com/), Rack's
-own browser is the easiest route: subscribe, and Rack keeps it updated.
+The plugin is in the [VCV Library](https://library.vcvrack.com/Keeos/Ogham), so
+Rack's own browser is the easiest route: subscribe, and Rack keeps it updated.
 
-Meanwhile, and for anyone who prefers not to, every release carries a package for
-each platform:
+For anyone who prefers not to, every release carries a package for each
+platform:
 
 **[Download from Releases](https://github.com/keeos-io/ogham-vcv/releases)** —
 `win-x64`, `mac-arm64`, `mac-x64`, `lin-x64`.
